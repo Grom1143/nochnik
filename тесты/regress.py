@@ -8,7 +8,7 @@ SHIM = ('<script>(function(){var RD=Date;var base=new RD();base.setHours(23,30,0
         'return new (Function.prototype.bind.apply(RD,[null].concat(a)))()}D.prototype=RD.prototype;'
         'D.now=function(){return RD.now()+window.__off};D.UTC=RD.UTC;D.parse=RD.parse;window.Date=D})()</script>')
 PRE = ('<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-       '{shim}<script>window.__e=[];onerror=function(m,s,l){{__e.push(m+" @"+l)}}</script></head><body>')
+       '{shim}<script>try{{localStorage.setItem("nochnik.napIntro","false")}}catch(e){{}}window.__e=[];onerror=function(m,s,l){{__e.push(m+" @"+l)}}</script></head><body>')
 DONE = 'function done(s){document.body.setAttribute("data-run",JSON.stringify(__e)+"|"+s)}'
 P = 'var $=function(s){return document.querySelector(s)};var pad=function(n){return String(n).padStart(2,"0")};'
 
@@ -19,8 +19,10 @@ SCEN = {
           lambda r: re.fullmatch(r'8\|стихнет через (15:00|14:5\d)', r) is not None),
  'preset': (False, 3000, 'setTimeout(function(){$(".preset").click();setTimeout(function(){done($("#miniWhat").textContent)},500)},300);',
           lambda r: r == 'Дождь · Море · Ветер'),
- 'aether': (False, 6000, 'setTimeout(function(){$("#ethBtn").click();setTimeout(function(){var d=$("#aether iframe").contentDocument;var r=d.querySelector("h1").textContent+"|"+!d.getElementById("toNochnik").hidden;d.defaultView.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape"}));setTimeout(function(){done(r+"|"+$("#aether").hidden+"|"+document.querySelectorAll("#aether iframe").length)},900)},2000)},300);',
-          lambda r: r == 'Эфир|true|true|0'),
+ 'nap-intro': (False, 14000, 'setTimeout(function(){localStorage.setItem("nochnik.napIntro","true");$("#lampBtn").click();setTimeout(function(){var a=$("#nap").hidden+"/"+$("#lamp").hidden;setTimeout(function(){done(a+"|"+$("#lamp").hidden+"|"+$("#nap").hidden);$("#lamp").click()},11500)},1000)},300);',
+          lambda r: r == 'false/true|false|true'),  # the intro plays, then the night light opens and the intro goes away
+ 'galaxy': (False, 9000, 'setTimeout(function(){$("#galBtn").click();setTimeout(function(){var r=$("#galCard h3").textContent+"|"+!!$("#galCv").getContext("webgl")+"|"+$("#galTags").children.length;$("#galBar [data-a=sun]").click();setTimeout(function(){r+="|"+$("#galCard h3").textContent;document.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));setTimeout(function(){done(r+"|"+$("#galaxy").hidden)},900)},1500)},2500)},300);',
+          lambda r: r == 'Млечный Путь|true|9|Солнце · вы здесь|true'),  # WebGL galaxy opens, flies to the Sun, Esc closes
  'calm': (False, 4000, 'setTimeout(function(){$("#skyBtn").click();setTimeout(function(){var r=document.documentElement.classList.contains("calm")+"|"+/^Над Ростовом/.test($("#calmCap").textContent);dispatchEvent(new KeyboardEvent("keydown",{key:"Escape"}));setTimeout(function(){done(r+"|"+document.documentElement.classList.contains("calm"))},300)},800)},300);',
           lambda r: r == 'true|true|false'),
  'lamp-off': (True, 6000, 'setTimeout(function(){$("#lampBtn").click();$("[data-off=\\"15\\"]").click();setTimeout(function(){var c=document.documentElement.classList.contains("lamp-on");window.__off+=16*60000;setTimeout(function(){var L=$("#lamp"),d=L.classList.contains("dark");$("#lampNight").click();setTimeout(function(){var r=c+"|"+d+"|"+L.classList.contains("dark")+"|"+L.hidden;L.click();done(r+"|"+L.hidden+"|"+document.documentElement.classList.contains("lamp-on"))},300)},1500)},1600)},300);',
@@ -35,8 +37,8 @@ SCEN = {
           lambda r: r == 'До подъёма в 09:30 '),
  'dawn+snooze': (False, 90000, 'setTimeout(function(){var d=new Date(Date.now()+60000);var w=$("#wake");w.value=pad(d.getHours())+":"+pad(d.getMinutes());w.dispatchEvent(new Event("change"));$("#dawn").checked=true;$("#dawn").dispatchEvent(new Event("change"));$("#lampBtn").click();setTimeout(function(){var a=$("#miniWhat").textContent+"/"+$("#snooze").hidden;$("#snooze").click();setTimeout(function(){done(a+"|"+$("#miniWhat").textContent+"|"+$("#lampSub").textContent.slice(0,13))},62000)},3000)},300);',
           lambda r: r == 'Птицы/false||ещё немного ·'),
- 'second-night': (False, 8000, 'setTimeout(function(){var d=new Date(Date.now()+60000);var w=$("#wake");w.value=pad(d.getHours())+":"+pad(d.getMinutes());w.dispatchEvent(new Event("change"));$("#dawn").checked=true;$("#dawn").dispatchEvent(new Event("change"));$("#lampBtn").click();setTimeout(function(){var a=$("#lampSub").textContent.slice(0,12);$("#lamp").click();w.value="07:00";w.dispatchEvent(new Event("change"));$("#lampBtn").click();done(a+"|"+$("#lamp").style.getPropertyValue("--dawn")+"|"+$("#lamp").classList.contains("day")+"|"+$("#lampSub").textContent.slice(-5))},3000)},300);',
-          lambda r: r == 'Доброе утро.|0.000|false|07:00'),  # a night light used at dawn must open dark the next evening
+ 'second-night': (False, 8000, 'setTimeout(function(){var d=new Date(Date.now()+60000);var w=$("#wake");w.value=pad(d.getHours())+":"+pad(d.getMinutes());w.dispatchEvent(new Event("change"));$("#dawn").checked=true;$("#dawn").dispatchEvent(new Event("change"));$("#lampBtn").click();setTimeout(function(){var a=$("#lampSub").textContent.slice(0,12);$("#lamp").click();var d3=new Date(Date.now()+3*36e5);w.value=pad(d3.getHours())+":"+pad(d3.getMinutes());w.dispatchEvent(new Event("change"));$("#lampBtn").click();done(a+"|"+$("#lamp").style.getPropertyValue("--dawn")+"|"+$("#lamp").classList.contains("day")+"|"+$("#lampSub").textContent.slice(-5))},3000)},300);',
+          lambda r: r.startswith('Доброе утро.|0.000|false|') and r[-3] == ':'),  # a night light used at dawn must open dark the next evening
  'night-log': (True, 4000, 'setTimeout(function(){$("#lampBtn").click();setTimeout(function(){window.__off+=(7*60+40)*60000;$("#lamp").click();setTimeout(function(){var d=JSON.parse(localStorage.getItem("nochnik.diary"));done(d.length+"|"+d[0].bed+"-"+d[0].wake+"|"+$("#toastTxt").textContent.slice(0,23))},300)},500)},500);',
           lambda r: r == '1|23:30-07:10|Ночь записана в дневник'),
  'diary-save': (False, 3000, 'setTimeout(function(){location.hash="diary";setTimeout(function(){$("#dSave").click();setTimeout(function(){done(document.querySelectorAll("#dChart .bar").length+"|"+$("#dEx").hidden)},300)},300)},300);',
