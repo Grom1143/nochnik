@@ -350,6 +350,30 @@ html.calm.still .calm-ui .bar{opacity:0;transform:translateY(6px)}
 html.calm.still .calm-cap{opacity:.55}
 
 /* one film grain over everything (the same as in Эфир): it ties the sky and the interface into one picture */
+/* telescope: one dark room, the eyepiece and a quiet card */
+.tel{position:fixed;inset:0;z-index:40;background:#020308;animation:telIn .5s ease both}
+@keyframes telIn{from{opacity:0}to{opacity:1}}
+#telCv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.tel-card{position:absolute;right:max(4vw,24px);top:50%;transform:translateY(-50%);width:min(360px,34vw);color:var(--moon);max-height:84vh;overflow:auto;scrollbar-width:thin}
+.tel-card h3{font:300 clamp(30px,3.4vw,44px)/1.05 var(--display);margin:2px 0 16px}
+.tel-kind{font:500 10.5px/1.6 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin:0}
+.tel-card dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0 0 16px;font-size:13.5px}
+.tel-card dt{color:var(--faint)}
+.tel-card dd{margin:0;color:var(--moon)}
+.tel-fact{font:italic 300 18px/1.45 var(--display);color:rgba(237,231,215,.78);margin:0 0 12px}
+.tel-warn{font-size:13px;line-height:1.5;color:var(--lamp);border-left:2px solid var(--lamp-soft);padding-left:10px;margin:0 0 12px}
+.tel-hint{font:500 10px/1.6 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:rgba(200,206,236,.35);margin:14px 0 0}
+.tel-list{position:absolute;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:flex;gap:4px;max-width:92vw;overflow-x:auto;padding:6px;border-radius:999px;background:rgba(10,13,32,.55);border:1px solid var(--line);scrollbar-width:none}
+.tel-list button{flex:none;border:0;background:none;border-radius:999px;padding:7px 13px;color:var(--muted);font:600 12.5px var(--body);cursor:pointer;transition:color .3s,background .3s}
+.tel-list button:hover{color:var(--moon);background:rgba(255,255,255,.05)}
+.tel-list button[aria-pressed="true"]{color:var(--lamp);background:var(--lamp-soft)}
+.tel-back{position:absolute;left:max(3vw,18px);top:calc(16px + env(safe-area-inset-top,0px));border:1px solid var(--line);background:rgba(10,13,32,.55);color:var(--muted);border-radius:999px;padding:8px 16px;font:600 13px var(--body);cursor:pointer}
+.tel-back:hover{color:var(--moon)}
+@media (max-width:760px),(max-aspect-ratio:21/20){
+  .tel-card{left:16px;right:16px;top:auto;bottom:calc(72px + env(safe-area-inset-bottom,0px));transform:none;width:auto;max-height:40vh}
+  .tel-card h3{font-size:30px;margin-bottom:10px}
+}
+html.tel-open .calm-ui{display:none}
 .grain{position:fixed;inset:-40px;z-index:45;pointer-events:none;opacity:.045;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");background-size:180px 180px}
 
 /* a thin scrollbar in the colour of the night, not the grey system one */
@@ -664,12 +688,21 @@ html.lamp-on .app,html.lamp-on #sky,html.lamp-on .grain,html.lamp-on .mini,html.
 <div class="calm-ui" id="calmUi" aria-hidden="true">
   <div class="calm-cap" id="calmCap"></div>
   <div class="bar" role="toolbar" aria-label="Небо">
+    <button type="button" id="calmTel" title="Телескоп: Луна, планеты, звёзды, днём — Солнце через фильтр (O, или клик по объекту)">Телескоп</button>
+    <button type="button" id="calmWx" title="Погода на небе: как сейчас за окном или на выбор (W)">Как в Ростове</button>
     <button type="button" id="calmWarp" aria-pressed="false" title="Время быстрее: 10 минут за секунду (T)">Время ×600</button>
     <button type="button" id="calmOut" class="z" aria-label="Отдалить" title="Отдалить (−)">−</button>
     <button type="button" id="calmIn" class="z" aria-label="Приблизить" title="Приблизить (+, колесо, щипок на тачпаде)">+</button>
     <button type="button" id="calmReset" title="Вернуть вид (двойной клик по небу)">К Луне</button>
     <button type="button" id="calmBack" title="Вернуться (Esc)">Вернуться</button>
   </div>
+</div>
+
+<div class="tel" id="tel" hidden role="dialog" aria-label="Телескоп">
+  <canvas id="telCv" aria-hidden="true"></canvas>
+  <aside class="tel-card" id="telCard" aria-live="polite"></aside>
+  <nav class="tel-list" id="telList" aria-label="Что посмотреть сейчас"></nav>
+  <button type="button" class="tel-back" id="telBack">← К небу</button>
 </div>
 
 <div class="toast" id="toast" hidden role="status"><span id="toastTxt"></span><button type="button" id="toastGo">Открыть</button></div>
@@ -810,7 +843,7 @@ const eph = (() => {
       const xh = h.r * cos(lath) * cos(lonh), yh = h.r * cos(lath) * sin(lonh), zh = h.r * sin(lath);
       const xg = xh + S.x, yg = yh + S.y, zg = zh, dg = Math.hypot(xg, yg, zg);
       const fv = Math.acos(Math.max(-1, Math.min(1, (h.r * h.r + dg * dg - S.r * S.r) / (2 * h.r * dg)))) / R;
-      return { k, eq: toEq(atan2(yg, xg), atan2(zg, Math.hypot(xg, yg)), d), mag: MAG[k](h.r, dg, fv), dist: dg };
+      return { k, eq: toEq(atan2(yg, xg), atan2(zg, Math.hypot(xg, yg)), d), mag: MAG[k](h.r, dg, fv), dist: dg, fv, illum: (1 + cos(fv)) / 2, elon: atan2(yg, xg), elat: atan2(zg, Math.hypot(xg, yg)) };
     });
     return out;
   }
@@ -865,6 +898,63 @@ function paintMoon(cv, dx, dy, elong, north = 0, crisp = 0) {
   q.putImageData(img, 0, 0);
 }
 
+
+/* bright stars with names, for the telescope: [name, RA°, Dec°, distance in light years, a line about it] */
+const TEL_STARS = [
+  ['Сириус', 101.287, -16.716, 8.6, 'Самая яркая звезда ночного неба. Двойная: рядом кружит белый карлик Сириус B размером с Землю.'],
+  ['Арктур', 213.915, 19.182, 37, 'Оранжевый гигант, самая яркая звезда северного полушария неба.'],
+  ['Вега', 279.234, 38.784, 25, 'Через 12 тысяч лет из-за прецессии земной оси станет Полярной звездой.'],
+  ['Капелла', 79.172, 45.998, 43, 'Выглядит одной звездой, а на деле это две пары звёзд — четыре солнца.'],
+  ['Ригель', 78.634, -8.202, 860, 'Голубой сверхгигант: светит в десятки тысяч раз ярче Солнца.'],
+  ['Процион', 114.825, 5.225, 11.5, 'Один из ближайших соседей Солнца, тоже с белым карликом-спутником.'],
+  ['Бетельгейзе', 88.793, 7.407, 550, 'Красный сверхгигант. На месте Солнца он достал бы почти до орбиты Юпитера.'],
+  ['Альтаир', 297.696, 8.868, 16.7, 'Вращается так быстро — оборот меньше чем за 9 часов, — что заметно сплюснут.'],
+  ['Альдебаран', 68.98, 16.509, 65, 'Оранжевый «глаз» Тельца. Стоит перед скоплением Гиады, но к нему не относится.'],
+  ['Антарес', 247.352, -26.432, 550, 'Его имя значит «соперник Марса»: такой же красный.'],
+  ['Спика', 201.298, -11.161, 250, 'Две горячие голубые звезды, так близко, что вытянули друг друга в яйца.'],
+  ['Поллукс', 116.329, 28.026, 34, 'Ближайший к нам звёздный гигант. У него нашли планету.'],
+  ['Кастор', 113.65, 31.888, 51, 'В телескоп — двойная, а всего в системе шесть звёзд.'],
+  ['Фомальгаут', 344.413, -29.622, 25, 'Окружён пылевым кольцом, его снимал «Хаббл».'],
+  ['Денеб', 310.358, 45.28, 2600, 'Один из самых мощных видимых глазом маяков: светит как десятки тысяч Солнц.'],
+  ['Регул', 152.093, 11.967, 79, 'Сердце Льва. Крутится почти на пределе — ещё чуть-чуть, и разорвался бы.'],
+  ['Беллатрикс', 81.283, 6.35, 250, 'Левое плечо Ориона, горячая голубая звезда.'],
+  ['Эльнат', 81.573, 28.607, 134, 'Рог Тельца, на границе с Возничим.'],
+  ['Альнилам', 84.053, -1.202, 2000, 'Середина пояса Ориона.'],
+  ['Альнитак', 85.19, -1.943, 1200, 'Левая звезда пояса Ориона; рядом туманность Конская Голова.'],
+  ['Минтака', 83.002, -0.299, 1200, 'Правая звезда пояса Ориона, почти точно на небесном экваторе.'],
+  ['Саиф', 86.939, -9.67, 650, 'Правая нога Ориона.'],
+  ['Полярная', 37.955, 89.264, 430, 'Земная ось смотрит почти на неё, поэтому всё небо крутится вокруг, а она стоит.'],
+  ['Мицар', 200.981, 54.925, 83, 'Рядом слабый Алькор — древняя проверка зрения. В телескоп и сам Мицар двойной.'],
+  ['Дубхе', 165.932, 61.751, 123, 'Край ковша Большой Медведицы: линия через Мерак и Дубхе ведёт к Полярной.'],
+  ['Мерак', 165.46, 56.382, 79, 'Вместе с Дубхе — «указатели» на Полярную.'],
+  ['Алиот', 193.507, 55.96, 83, 'Самая яркая звезда Большой Медведицы.'],
+  ['Бенетнаш', 206.885, 49.313, 104, 'Конец ручки ковша.'],
+  ['Алголь', 47.042, 40.956, 90, 'Звезда-«демон»: каждые 2,87 суток на несколько часов тускнеет — её закрывает соседка.'],
+  ['Мирфак', 51.081, 49.861, 510, 'Ярчайшая в Персее, окружена россыпью звёзд — красиво в бинокль.'],
+  ['Альферац', 2.097, 29.09, 97, 'Угол Большого квадрата Пегаса, хотя формально звезда Андромеды.'],
+  ['Шедар', 10.127, 56.537, 228, 'Одна из звёзд буквы W — Кассиопеи.'],
+  ['Каф', 2.295, 59.15, 54, 'Крайняя звезда W Кассиопеи.'],
+  ['Денебола', 177.265, 14.572, 36, 'Хвост Льва.'],
+  ['Альфард', 141.897, -8.659, 180, '«Одинокая» — вокруг неё на небе нет ярких звёзд.'],
+  ['Рас Альхаге', 263.734, 12.56, 49, 'Голова Змееносца.'],
+  ['Альбирео', 292.68, 27.96, 430, 'В телескоп распадается на две: золотую и голубую. Одна из красивейших пар неба.'],
+  ['Садр', 305.557, 40.257, 1800, 'Центр Северного креста, вокруг — светящиеся облака Млечного Пути.'],
+  ['Гемма', 233.672, 26.715, 75, '«Жемчужина» Северной Короны.'],
+  ['Альциона', 56.871, 24.105, 440, 'Ярчайшая звезда Плеяд. Глазом в скоплении видно 6–7 звёзд, в телескоп — сотни.'],
+  ['Хамаль', 31.793, 23.462, 66, 'Главная звезда Овна.'],
+  ['Мирах', 17.433, 35.621, 200, 'Красный гигант; от него рукой подать до Туманности Андромеды.'],
+  ['Альмах', 30.975, 42.33, 350, 'В телескоп — оранжевая и голубая звёзды рядом.'],
+  ['Эниф', 326.046, 9.875, 690, 'Нос Пегаса, оранжевый сверхгигант.'],
+  ['Шеат', 345.944, 28.083, 196, 'Красный гигант в углу квадрата Пегаса.'],
+  ['Маркаб', 346.19, 15.205, 133, 'Угол Большого квадрата Пегаса.'],
+  ['Унук', 236.067, 6.426, 74, 'Сердце Змеи.'],
+  ['Эльтанин', 269.152, 51.489, 154, 'Голова Дракона.'],
+  ['Кохаб', 222.676, 74.156, 131, 'Три тысячи лет назад была ближе всех к полюсу — Полярная древних.'],
+  ['Мирзам', 95.675, -17.956, 500, '«Глашатай»: восходит перед Сириусом.'],
+  ['Адара', 104.656, -28.972, 430, 'В ультрафиолете — самая яркая звезда нашего неба.'],
+  ['Мира', 34.837, -2.978, 300, '«Удивительная»: за 11 месяцев то видна глазом, то пропадает.']
+];
+
 /* ============ sky: the real sky over Rostov, drawn in layers ============ */
 // base   — gradient, twilight, Milky Way, faint stars, constellations, planets; redrawn every few seconds as the Earth turns
 // ground — hills, poplars and the house; redrawn only when the view changes
@@ -875,7 +965,8 @@ const sky = (() => {
   const mk = (w = 1, h = 1) => { const k = document.createElement('canvas'); k.width = w; k.height = h; return k; };
   const st = { pulse: 0, level: 0, lamp: 0, mx: 0, my: 0, fire: 0, calm: 0 };
   let W = 0, H = 0, dpr = 1, S = 1, cx = 0, cy = 0, lim = 5.8, night = 1, moonLight = 0;
-  const view = { az: 180, alt: 20, fov: 100, user: false };
+  const FOV0 = 80;                   // about what two eyes take in at once
+  const view = { az: 180, alt: 20, fov: FOV0, user: false };
   const base = mk(), bx = base.getContext('2d'), ground = mk(), gx = ground.getContext('2d');
   const mwC = mk(), mw = mwC.getContext('2d'), moonC = mk(), MARGIN = 28, BM = 10;   // margins for the parallax
 
@@ -883,10 +974,10 @@ const sky = (() => {
   const i16 = b => { const s = atob(b), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int16Array(u.buffer); };
   const unit = (ra, de) => [Math.cos(de * R) * Math.cos(ra * R), Math.cos(de * R) * Math.sin(ra * R), Math.sin(de * R)];
   const sd = i16(SKYDATA.stars), NS = sd.length / 4;
-  const SV = new Float64Array(NS * 3), SMAG = new Float32Array(NS), SCOL = new Uint8Array(NS), SPH = new Float32Array(NS), SSP = new Float32Array(NS);
+  const SV = new Float64Array(NS * 3), SMAG = new Float32Array(NS), SCOL = new Uint8Array(NS), SPH = new Float32Array(NS), SSP = new Float32Array(NS), SBV = new Float32Array(NS);
   for (let i = 0; i < NS; i++) {
     SV.set(unit(sd[4 * i] / 90, sd[4 * i + 1] / 360), 3 * i);
-    SMAG[i] = sd[4 * i + 2] / 1000; const bv = sd[4 * i + 3] / 1000;
+    SMAG[i] = sd[4 * i + 2] / 1000; const bv = SBV[i] = sd[4 * i + 3] / 1000;
     SCOL[i] = bv < -.05 ? 0 : bv < .2 ? 1 : bv < .5 ? 2 : bv < .85 ? 3 : bv < 1.2 ? 4 : 5;
     SPH[i] = Math.random() * 6.283; SSP[i] = .7 + Math.random() * 2.2;
   }
@@ -925,19 +1016,19 @@ const sky = (() => {
   }
   const P = [0, 0];
   function proj(vx, vy, vz) {
-    const Z = M[6] * vx + M[7] * vy + M[8] * vz; if (Z < -.3) return false;
-    const k = 2 * S / (1 + Z);
+    const Z = M[6] * vx + M[7] * vy + M[8] * vz; if (Z < .03) return false;
+    const k = S / Z;
     P[0] = cx + (M[0] * vx + M[1] * vy + M[2] * vz) * k; P[1] = cy - (M[3] * vx + M[4] * vy + M[5] * vz) * k;
     return P[0] > -200 && P[0] < W + 200 && P[1] > -200 && P[1] < H + 200;
   }
   const altOf = v => Math.asin(clamp(U[0] * v[0] + U[1] * v[1] + U[2] * v[2], -1, 1)) / R;
   function projH(az, alt) {          // landscape is fixed in azimuth / altitude
     const ca = Math.cos(alt * R), v = [Math.sin(az * R) * ca, Math.cos(az * R) * ca, Math.sin(alt * R)];
-    const d = k => CAM[k][0] * v[0] + CAM[k][1] * v[1] + CAM[k][2] * v[2], Z = d(2), k = 2 * S / (1 + Math.max(-.3, Z));
+    const d = k => CAM[k][0] * v[0] + CAM[k][1] * v[1] + CAM[k][2] * v[2], Z = d(2), k = S / Math.max(.03, Z);
     return [cx + d(0) * k, cy - d(1) * k];
   }
   function unproj(sx, sy) {         // screen → equatorial (a released thought becomes a real star that turns with the sky)
-    const a = (sx - cx) / (2 * S), b = (cy - sy) / (2 * S), q = a * a + b * b, Z = (1 - q) / (1 + q), X = a * (1 + Z), Y = b * (1 + Z);
+    const a = (sx - cx) / S, b = (cy - sy) / S, n = Math.sqrt(a * a + b * b + 1), X = a / n, Y = b / n, Z = 1 / n;
     return [M[0] * X + M[3] * Y + M[6] * Z, M[1] * X + M[4] * Y + M[7] * Z, M[2] * X + M[5] * Y + M[8] * Z];
   }
   // a star's apparent magnitude after the atmosphere (it dims and twinkles harder toward the horizon)
@@ -953,8 +1044,8 @@ const sky = (() => {
   const skyNow = () => warp ? new Date(warpBase + (performance.now() - warpReal) * warp) : new Date();
 
   function layout() {
-    S = Math.max(W, H * 1.15) / (4 * Math.tan(view.fov * R / 4)); cx = W / 2; cy = H / 2;
-    if (!view.user) view.alt = 2 * Math.atan((H * (W < H * .8 ? .76 : .86) - H / 2) / (2 * S)) / R;   // horizon near the bottom (higher on a phone: the caption and buttons live there)
+    S = Math.max(W, H * 1.15) / (2 * Math.tan(view.fov * R / 2)); cx = W / 2; cy = H / 2;
+    if (!view.user) view.alt = Math.atan((H * (W < H * .8 ? .76 : .86) - H / 2) / S) / R;   // horizon near the bottom (higher on a phone: the caption and buttons live there)
   }
   function resize() {
     dpr = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight;
@@ -969,6 +1060,55 @@ const sky = (() => {
   const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
   const rgb = a => `rgb(${a[0]},${a[1]},${a[2]})`;
   const NIGHT = [[5, 7, 19], [12, 18, 52], [30, 31, 72], [56, 44, 76]], DAY = [[14, 28, 66], [30, 54, 104], [70, 92, 140], [118, 128, 160]];
+  // deep zenith, a paler horizon, the glow round the Sun; at dusk an orange band on the Sun's side,
+  // the pink belt of Venus over the Earth's blue shadow on the other. Rows: Sun altitude
+  const SKY_S = [-18, -12, -7, -3.5, 0, 3, 8, 20, 50];
+  const SKY_Z = [[4, 6, 16], [6, 9, 26], [14, 24, 60], [28, 46, 98], [44, 76, 140], [52, 98, 170], [58, 116, 196], [56, 122, 210], [48, 118, 216]];
+  const SKY_H = [[34, 30, 66], [40, 38, 76], [60, 58, 102], [100, 96, 140], [150, 140, 168], [176, 180, 204], [186, 204, 230], [190, 214, 238], [184, 212, 240]];
+  const SKY_G = [[34, 30, 66], [44, 34, 72], [104, 68, 92], [210, 104, 70], [255, 132, 56], [255, 168, 94], [255, 212, 158], [252, 236, 212], [240, 240, 232]];
+  const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const tab = (T, s) => { let i = 0; while (i < SKY_S.length - 2 && s > SKY_S[i + 1]) i++; return lerp3(T[i], T[i + 1], clamp((s - SKY_S[i]) / (SKY_S[i + 1] - SKY_S[i]), 0, 1)); };
+  const skyC = mk(), skyX = skyC.getContext('2d'); let skyImg = null, skyK = 4;
+  function horiz(v) {                // equatorial → [east, north, up]
+    const L = eph.lst(skyNow(), LON) * R, f = LAT * R, sL = Math.sin(L), cL = Math.cos(L);
+    return [-sL * v[0] + cL * v[1], -Math.sin(f) * (cL * v[0] + sL * v[1]) + Math.cos(f) * v[2], U[0] * v[0] + U[1] * v[1] + U[2] * v[2]];
+  }
+  function paintSky(sAlt, moonLift, ovc) {
+    const k = skyK = settled ? 4 : 12, w = Math.ceil((W + BM * 2) / k) + 2, h = Math.ceil((H + BM * 2) / k) + 2;
+    if (skyC.width !== w || skyC.height !== h || !skyImg) { skyC.width = w; skyC.height = h; skyImg = skyX.createImageData(w, h); }
+    const d = skyImg.data, Zc = tab(SKY_Z, sAlt), Hc = tab(SKY_H, sAlt), G = tab(SKY_G, sAlt), sh = horiz(E.sun.eq);
+    const dusk = Math.exp(-(((sAlt + 1) / 6) ** 2)), belt = clamp(1 - Math.abs(sAlt + 2.5) / 4.5, 0, 1) * (1 - wx.cover);
+    const lobeP = 2.5 + 10 * (1 - dusk), halo = clamp((sAlt + 4) / 6, 0, 1) * (1 - wx.cover * .7);
+    const OV = lerp3(OVC[1], OVD[1], clamp(sAlt / 8 + .4, 0, 1)), ovH = lerp3(OVC[3], OVD[3], clamp(sAlt / 8 + .4, 0, 1));
+    const dim = 1 - (1 - st.calm) * .42 * clamp(sAlt / 10 + .3, 0, 1);    // behind the page the day stays dusky, so the text reads
+    const C0 = CAM[0], C1 = CAM[1], C2 = CAM[2], ml = moonLift;
+    for (let j = 0; j < h; j++) {
+      const b = (cy - (j * k - BM)) / S;
+      for (let i = 0; i < w; i++) {
+        const a = (i * k - BM - cx) / S, n = 1 / Math.sqrt(a * a + b * b + 1);
+        const dx = (a * C0[0] + b * C1[0] + C2[0]) * n, dy = (a * C0[1] + b * C1[1] + C2[1]) * n, dz = (a * C0[2] + b * C1[2] + C2[2]) * n;
+        const alt = dz > 0 ? dz : 0, cg = dx * sh[0] + dy * sh[1] + dz * sh[2], ia = 1 - alt;
+        const tH = ia * ia * ia * ia * ia;
+        let r = Zc[0] + (Hc[0] - Zc[0]) * tH, g = Zc[1] + (Hc[1] - Zc[1]) * tH, bb = Zc[2] + (Hc[2] - Zc[2]) * tH;
+        const lobe = Math.pow((1 + cg) / 2, lobeP) * Math.pow(ia, 2.5);          // the glow toward the Sun, hugging the horizon
+        r += (G[0] - r) * lobe; g += (G[1] - g) * lobe; bb += (G[2] - bb) * lobe;
+        if (halo > 0) { const m = Math.exp((cg - 1) * 60) * halo; r += (255 - r) * m * .8; g += (250 - g) * m * .75; bb += (236 - bb) * m * .65; }
+        if (belt > 0) {
+          const anti = Math.pow((1 - cg) / 2, 3) * belt, deg = alt * 57.3;
+          const pink = anti * clamp(1 - Math.abs(deg - 8) / 8, 0, 1) * .5, shadow = anti * clamp(1 - deg / 5, 0, 1) * .55;
+          r += (216 - r) * pink; g += (150 - g) * pink; bb += (168 - bb) * pink;
+          r += (58 - r) * shadow; g += (68 - g) * shadow; bb += (112 - bb) * shadow;
+        }
+        r += 6 * ml; g += 10 * ml; bb += 22 * ml;
+        if (ovc > 0) { const o = ovc, oc = tH; r += (OV[0] + (ovH[0] - OV[0]) * oc - r) * o; g += (OV[1] + (ovH[1] - OV[1]) * oc - g) * o; bb += (OV[2] + (ovH[2] - OV[2]) * oc - bb) * o; }
+        const p = 4 * (j * w + i); d[p] = r * dim; d[p + 1] = g * dim; d[p + 2] = bb * dim; d[p + 3] = 255;
+      }
+    }
+    skyX.putImageData(skyImg, 0, 0);
+    const hj = clamp(Math.round((projH(view.az, 0)[1] + BM) / k) - 1, 0, h - 1), hp = 4 * (hj * w + (w >> 1));
+    return [d[hp], d[hp + 1], d[hp + 2]];
+  }
+  const OVC = [[18, 18, 26], [26, 25, 34], [40, 36, 46], [66, 54, 58]], OVD = [[50, 56, 70], [62, 68, 82], [82, 86, 100], [108, 108, 120]];
 
   let dirty = true, groundDirty = true, lastBase = 0, house = null;
   function renderBase(date) {
@@ -978,37 +1118,27 @@ const sky = (() => {
     night = clamp((-sAlt - 3) / 13, 0, 1);
     moonLight = E.moon.illum * clamp((mAlt + 1) / 22, 0, 1);
     lim = 5.9 - moonLight * .8 - (1 - night) * 4.6 + st.calm * .15;   // the Moon washes out faint stars, kept gentle
+    lim -= clamp((sAlt + 5) / 6, 0, 1) * 3;
+    lim -= Math.pow(wx.cover, 1.6) * 3.4 + wx.fog * 2.8 + (wx.rain + wx.snow) * 1.2;   // clouds, fog and rain hide the faint ones
     bodies = { sAlt, mAlt };
     if (!gifts) { gifts = store.get('gifts', []).map(([gx0, gy0]) => unproj(gx0 * W, gy0 * H)); saveGifts(); }
 
     const q = bx; q.setTransform(dpr, 0, 0, dpr, BM * dpr, BM * dpr);
     // gradient: zenith → horizon
     const day = 1 - night, moonLift = moonLight * .35;
-    const cols = NIGHT.map((n, i) => mix(mix(n, [n[0] + 6, n[1] + 10, n[2] + 22], moonLift), DAY[i], day * .9));
+    const ovc = Math.min(.88, Math.pow(wx.cover, 1.5) * .8 + wx.fog * .35);   // overcast: low cloud lit from below by the city, warmer at the horizon
     const hzY = projH(view.az, 0)[1];
-    const g = q.createLinearGradient(0, Math.min(0, hzY - H), 0, hzY);
-    g.addColorStop(0, rgb(cols[0])); g.addColorStop(.55, rgb(cols[1])); g.addColorStop(.86, rgb(cols[2])); g.addColorStop(1, rgb(cols[3]));
-    q.fillStyle = g; q.fillRect(-BM, -BM, W + BM * 2, H + BM * 2);
-    horizonCol = cols[3];
-
-    // twilight glow where the Sun really is
-    if (sAlt > -20) {
-      const s = E.sun.eq, Z = M[6] * s[0] + M[7] * s[1] + M[8] * s[2];
-      const tw = clamp((sAlt + 20) / 18, 0, 1) * (Z > -.6 ? 1 : 0);
-      if (tw > 0) {
-        const su = sunHorizon(s);
-        const rr = H * (.55 + tw * .5), gl = q.createRadialGradient(su[0], su[1], 0, su[0], su[1], rr);
-        gl.addColorStop(0, `rgba(255,170,110,${.42 * tw})`); gl.addColorStop(.3, `rgba(220,120,110,${.2 * tw})`); gl.addColorStop(.65, `rgba(120,80,140,${.08 * tw})`); gl.addColorStop(1, 'rgba(60,40,90,0)');
-        q.fillStyle = gl; q.fillRect(-BM, -BM, W + BM * 2, H + BM * 2);
-      }
-    }
+    horizonCol = paintSky(sAlt, moonLift, ovc).map(Math.round);
+    q.imageSmoothingEnabled = true; q.imageSmoothingQuality = 'high';
+    q.drawImage(skyC, -BM - skyK / 2, -BM - skyK / 2, skyC.width * skyK, skyC.height * skyK);
+    gLight = Math.pow(clamp((sAlt + 3) / 13, 0, 1), .8) * (.45 + .55 * st.calm);       // how lit the land is
     // faint green airglow over the horizon (real: oxygen at ~100 km glows at 558 nm)
     const ag = q.createLinearGradient(0, hzY - H * .22, 0, hzY);
     ag.addColorStop(0, 'rgba(70,140,120,0)'); ag.addColorStop(1, `rgba(70,140,120,${(.07 + st.level * .25) * night})`);
     q.fillStyle = ag; q.fillRect(-BM, -BM, W + BM * 2, H + BM * 2);
 
     // Milky Way: five nested density contours, blurred on a quarter-size canvas
-    const mwA = night * (1 - moonLight * .55);
+    const mwA = night * (1 - moonLight * .55) * Math.pow(1 - wx.cover, 2) * (1 - wx.fog);
     if (mwA > .02) {
       const mW = mwC.width, mH = mwC.height, k4 = mW / W;
       mw.setTransform(1, 0, 0, 1, 0, 0); mw.clearRect(0, 0, mW, mH);
@@ -1020,7 +1150,7 @@ const sky = (() => {
         rings.forEach(ring => {
           let started = false;
           for (const v of ring) {
-            const Z = M[6] * v[0] + M[7] * v[1] + M[8] * v[2], kk = 2 * S / (1 + Math.max(-.2, Z));
+            const Z = M[6] * v[0] + M[7] * v[1] + M[8] * v[2], kk = S / Math.max(.03, Z);
             const sx = (cx + (M[0] * v[0] + M[1] * v[1] + M[2] * v[2]) * kk) * k4, sy = (cy - (M[3] * v[0] + M[4] * v[1] + M[5] * v[2]) * kk) * k4;
             started ? mw.lineTo(sx, sy) : (mw.moveTo(sx, sy), started = true);
           }
@@ -1045,8 +1175,8 @@ const sky = (() => {
     const mv = E.moon.eq;
     if (mAlt > -3) {
       const Z = M[6] * mv[0] + M[7] * mv[1] + M[8] * mv[2];
-      if (Z > -.3) {
-        const k = 2 * S / (1 + Z), mxp = cx + (M[0] * mv[0] + M[1] * mv[1] + M[2] * mv[2]) * k, myp = cy - (M[3] * mv[0] + M[4] * mv[1] + M[5] * mv[2]) * k;
+      if (Z > .03) {
+        const k = S / Z, mxp = cx + (M[0] * mv[0] + M[1] * mv[1] + M[2] * mv[2]) * k, myp = cy - (M[3] * mv[0] + M[4] * mv[1] + M[5] * mv[2]) * k;
         const a = E.moon.illum * clamp((mAlt + 3) / 10, 0, 1);
         [[H * .7, .07], [H * .18, .1]].forEach(([rr, al]) => {
           const hg = q.createRadialGradient(mxp, myp, 0, mxp, myp, rr);
@@ -1057,7 +1187,7 @@ const sky = (() => {
     }
 
     // constellations: hairlines and quiet names
-    const lineA = .032 + st.calm * .07, nameA = .1 + st.calm * .24;
+    const veil = (1 - wx.cover * .6 - wx.fog * .3) * (.12 + .88 * night), lineA = (.032 + st.calm * .07) * veil, nameA = (.1 + st.calm * .24) * veil;   // under cloud the guides fade too
     q.lineWidth = 1; q.strokeStyle = `rgba(200,212,255,${lineA * (.4 + .6 * night)})`; q.beginPath();
     for (const k of CON) for (const ln of k.lines) {
       let prev = false;
@@ -1117,14 +1247,14 @@ const sky = (() => {
     }
     q.textAlign = 'start';
     lastBase = performance.now(); dirty = false;
-    if (Math.abs(moonLight - groundML) > .04 || Math.abs(night - groundNight) > .04) groundDirty = true;
+    if (Math.abs(moonLight - groundML) > .04 || Math.abs(night - groundNight) > .04 || Math.abs(gLight - groundGL) > .025) groundDirty = true;
   }
   // sun glow anchor: where the Sun's vertical meets the horizon (even when it is off screen)
   function sunHorizon(s) {
     // drop the Sun onto the horizon: remove its "up" component and renormalise, then project
     const up = U[0] * s[0] + U[1] * s[1] + U[2] * s[2];
     const flat = [s[0] - U[0] * up, s[1] - U[1] * up, s[2] - U[2] * up], n = Math.hypot(...flat) || 1;
-    const v = flat.map(t => t / n), Z = M[6] * v[0] + M[7] * v[1] + M[8] * v[2], k = 2 * S / (1 + Math.max(-.2, Z));
+    const v = flat.map(t => t / n), Z = M[6] * v[0] + M[7] * v[1] + M[8] * v[2], k = S / Math.max(.03, Z);
     return [cx + (M[0] * v[0] + M[1] * v[1] + M[2] * v[2]) * k, cy - (M[3] * v[0] + M[4] * v[1] + M[5] * v[2]) * k];
   }
   let dust = null;
@@ -1159,44 +1289,47 @@ const sky = (() => {
     return sx => { const v = a[Math.round((sx - gox0()) / 4)]; return v === undefined || isNaN(v) ? NaN : v + smy * 8; };
   }
   let bankAt = () => NaN, riverTop = () => NaN, riverBot = () => NaN;
-  let riverAz = 0, river = null, groundML = -1, groundNight = -1, horizonCol = [38, 30, 52];
+  let riverAz = 0, river = null, groundML = -1, groundNight = -1, horizonCol = [38, 30, 52], gLight = 0, groundGL = -1;
+  const lit3 = (n, d) => rgb(mix(n, d, gLight));
   function renderGround() {
     const q = gx; q.setTransform(dpr, 0, 0, dpr, MARGIN * dpr, 0); q.clearRect(-MARGIN, 0, W + MARGIN * 2, H + MARGIN);
-    const span = view.fov * .9 + 30;
+    const span = view.fov * .75 + 12;
     const line = fn => { const a = []; for (let az = view.az - span; az <= view.az + span; az += .6) a.push(projH(az, fn(az))); return a; };
     const fill = (p, col) => { q.fillStyle = col; q.beginPath(); q.moveTo(-MARGIN, H + MARGIN); p.forEach(([px, py]) => q.lineTo(px, py)); q.lineTo(W + MARGIN, H + MARGIN); q.closePath(); q.fill(); };
     const rimLine = (p, a) => { q.strokeStyle = `rgba(210,216,248,${a})`; q.lineWidth = 1; q.beginPath(); p.forEach(([px, py], j) => j ? q.lineTo(px, py + .5) : q.moveTo(px, py + .5)); q.stroke(); };
     const rim = .03 + moonLight * .1, yAt = alt => projH(view.az, alt)[1];
     // far ridge: lighter, it sits deep in the air
-    const p1 = line(ridge); fill(p1, rgb(mix(horizonCol, [10, 12, 30], .62))); rimLine(p1, rim * .5);
+    const p1 = line(ridge); fill(p1, lit3(mix(horizonCol, [10, 12, 30], .62), mix(horizonCol, [92, 108, 124], .45))); rimLine(p1, rim * .5);
     const hz = q.createLinearGradient(0, yAt(2.5), 0, yAt(.2));
     hz.addColorStop(0, 'rgba(126,134,182,0)'); hz.addColorStop(1, `rgba(126,134,182,${.05 + moonLight * .06})`);
     q.fillStyle = hz; q.fillRect(-MARGIN, yAt(2.5), W + MARGIN * 2, yAt(.2) - yAt(2.5));
-    const p2 = line(hillMid); fill(p2, '#0b0d26'); rimLine(p2, rim * .85);
+    const p2 = line(hillMid); fill(p2, lit3([11, 13, 38], [84, 94, 60])); rimLine(p2, rim * .85);
     // the river: a band of reflected sky between the banks
     const top = line(() => -.2), bot = line(() => -2.4);
     const rg = q.createLinearGradient(0, yAt(-.2), 0, yAt(-2.4));
-    rg.addColorStop(0, rgb(mix(horizonCol, [8, 10, 28], .35))); rg.addColorStop(1, '#080a22');
+    rg.addColorStop(0, rgb(mix(horizonCol, [8, 10, 28], .35 - gLight * .2))); rg.addColorStop(1, lit3([8, 10, 34], mix(horizonCol, [36, 54, 80], .6)));
     q.fillStyle = rg; q.beginPath(); top.forEach(([px, py], j) => j ? q.lineTo(px, py) : q.moveTo(px, py));
     for (let j = bot.length - 1; j >= 0; j--) q.lineTo(bot[j][0], bot[j][1]); q.closePath(); q.fill();
     q.strokeStyle = `rgba(210,216,248,${.05 + moonLight * .05})`; q.beginPath(); top.forEach(([px, py], j) => j ? q.lineTo(px, py + .5) : q.moveTo(px, py + .5)); q.stroke();
     river = true; riverTop = sampler(top); riverBot = sampler(bot);
-    const p3 = line(bank); fill(p3, '#05071a'); rimLine(p3, rim * .45);
+    const p3 = line(bank); fill(p3, lit3([5, 7, 26], [60, 68, 36])); rimLine(p3, rim * .45);
     bankAt = sampler(p3);
     // poplars on the near bank
-    q.fillStyle = '#04061a';
+    q.fillStyle = lit3([4, 6, 26], [132, 106, 42]);      // October: the poplars have turned gold
     [[-31, 1], [-29.6, .8], [-27.9, .92], [-19.5, .6], [16.5, .55], [24, 1], [25.3, .86], [33, .7]].forEach(([d, sz], i) => {
       const az = riverAz + d, [px, py] = projH(az, bank(az) - .05), hh = (30 + (i * 37 % 15)) * sz, w = (5 + (i % 3)) * (.7 + sz * .3);
       q.beginPath(); q.ellipse(px, py - hh * .55, w, hh * .56, 0, 0, 7); q.fill(); q.fillRect(px - 1, py - 4, 2, 6);
     });
     // the house sits on the middle hill
     const [hx0, hy0] = projH(houseAz, hillMid(houseAz) - .12), hx = Math.round(hx0), hy = Math.round(hy0) + 2;
-    q.fillStyle = '#0b0d26'; q.fillRect(hx - 10, hy - 16, 26, 16);
+    q.fillStyle = lit3([11, 13, 38], [156, 130, 104]); q.fillRect(hx - 10, hy - 16, 26, 16);
+    q.fillStyle = lit3([11, 13, 38], [118, 56, 44]);
     q.beginPath(); q.moveTo(hx - 13, hy - 15); q.lineTo(hx + 3, hy - 28); q.lineTo(hx + 19, hy - 15); q.fill();
     q.fillRect(hx + 9, hy - 27, 4, 8);
+    if (gLight > .05) { q.fillStyle = `rgba(50,58,74,${gLight})`; q.fillRect(hx + 1, hy - 11, 6, 6); }   // a dark pane by day
     house = hx0 > -80 && hx0 < W + 80 && hy0 > -60 && hy0 < H + 80 ? { x: hx, y: hy } : null;
     if (!house) smoke.length = 0;
-    groundML = moonLight; groundNight = night;
+    groundML = moonLight; groundNight = night; groundGL = gLight;
     groundDirty = false;
   }
 
@@ -1204,7 +1337,7 @@ const sky = (() => {
     const mv = E.moon.eq, sv = E.sun.eq;
     // directions on screen: toward the Sun along the sky, and toward the celestial pole (lunar north ≈ it)
     const step = (v, t) => { const d = v[0] * t[0] + v[1] * t[1] + v[2] * t[2], w = [t[0] - d * v[0], t[1] - d * v[1], t[2] - d * v[2]], n = Math.hypot(...w) || 1; return [v[0] + .01 * w[0] / n, v[1] + .01 * w[1] / n, v[2] + .01 * w[2] / n]; };
-    const at = v => { const Z = M[6] * v[0] + M[7] * v[1] + M[8] * v[2], k = 2 * S / (1 + Math.max(-.2, Z)); return [cx + (M[0] * v[0] + M[1] * v[1] + M[2] * v[2]) * k, cy - (M[3] * v[0] + M[4] * v[1] + M[5] * v[2]) * k]; };
+    const at = v => { const Z = M[6] * v[0] + M[7] * v[1] + M[8] * v[2], k = S / Math.max(.03, Z); return [cx + (M[0] * v[0] + M[1] * v[1] + M[2] * v[2]) * k, cy - (M[3] * v[0] + M[4] * v[1] + M[5] * v[2]) * k]; };
     const m0 = at(mv), ms = at(step(mv, sv)), mn = at(step(mv, [0, 0, 1]));
     let dx = ms[0] - m0[0], dy = ms[1] - m0[1]; const n = Math.hypot(dx, dy) || 1; dx /= n; dy /= n;
     const north = Math.atan2(mn[0] - m0[0], -(mn[1] - m0[1]));
@@ -1216,23 +1349,68 @@ const sky = (() => {
   let moonSpriteAt = -1e9;
   addEventListener('moontex', () => { moonSpriteAt = -1e9; });
 
-  /* ---- clouds: a few cirrus streaks, seeded by the date so tonight's clouds stay tonight's */
-  let clouds = null, cloudA = 0, cloudiness = .5;
-  function makeClouds() {
+  /* ---- weather over Rostov: the real one (Open-Meteo, no key) or one chosen by hand.
+     No internet — the default sky: a few thin cirrus, as before. Changes fade in over a few seconds */
+  const WXN = { real: 'Как в Ростове', clear: 'Ясно', cloudy: 'Облачно', fog: 'Туман', rain: 'Дождь', snow: 'Снег', storm: 'Гроза' };
+  const WXSET = { clear: { cover: .03 }, cloudy: { cover: .8, wind: 5 }, fog: { cover: .35, fog: .9, wind: 1 }, rain: { cover: .95, rain: .7, wind: 4 }, snow: { cover: .9, snow: .75, wind: 2 }, storm: { cover: 1, rain: 1, storm: 1, wind: 9 } };
+  const WX0 = { cover: .3, fog: 0, rain: 0, snow: 0, storm: 0, wind: 3, wdir: 270 };
+  let wxMode = store.get('wxMode', 'real'), wxReal = null;
+  const wx = Object.assign({}, WX0), wxT = Object.assign({}, WX0);
+  function wxApply() {
+    let o = WX0;
+    if (wxMode !== 'real') o = Object.assign({}, WX0, { cover: 0 }, WXSET[wxMode]);
+    else if (wxReal) {
+      const r = wxReal, c = r.code;
+      o = { cover: r.cover / 100, wind: r.wind, wdir: r.wdir, storm: c >= 95 ? 1 : 0,
+        fog: c === 45 || c === 48 ? .9 : r.vis < 1000 ? .8 : r.vis < 4000 ? .5 : r.vis < 10000 ? .22 : 0,
+        rain: c >= 95 ? 1 : c >= 51 && c <= 57 ? .25 : (c >= 61 && c <= 67) || (c >= 80 && c <= 82) ? clamp(.35 + r.precip / 3, .35, 1) : 0,
+        snow: (c >= 71 && c <= 77) || c === 85 || c === 86 ? clamp(.4 + r.snowfall * 1.5, .4, 1) : 0 };
+    }
+    if (Math.abs(o.cover - wxT.cover) > .03) clouds = null;          // a new sky of clouds for a new cover
+    Object.assign(wxT, o); wxT.wind = o.wind; wxT.wdir = o.wdir; drops = null; dirty = true;
+  }
+  async function wxFetch() {
+    try {
+      const u = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,weather_code,cloud_cover,visibility,precipitation,snowfall,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms`;
+      const j = (await (await fetch(u, { cache: 'no-store' })).json()).current;
+      wxReal = { cover: j.cloud_cover, vis: j.visibility == null ? 3e4 : j.visibility, code: j.weather_code, precip: j.precipitation || 0, snowfall: j.snowfall || 0, wind: j.wind_speed_10m, wdir: j.wind_direction_10m, temp: j.temperature_2m, at: Date.now() };
+    } catch (e) { wxReal = null; }     // offline or blocked: the default sky
+    wxApply();
+  }
+  function wxText() {
+    if (wxMode !== 'real') return 'погода на небе: ' + WXN[wxMode].toLowerCase();
+    if (!wxReal) return '';
+    const r = wxReal, c = r.code, tt = Math.round(r.temp);
+    const what = c >= 95 ? 'гроза' : wxT.snow ? 'снег' : wxT.rain ? (c <= 57 ? 'морось' : 'дождь') : wxT.fog > .6 ? 'туман' : wxT.fog > .3 ? 'дымка'
+      : r.cover > 85 ? 'пасмурно' : r.cover > 45 ? 'облачно' : r.cover > 15 ? 'малооблачно' : 'ясно';
+    return `за окном ${what}, ${tt > 0 ? '+' : tt < 0 ? '−' : ''}${Math.abs(tt)}°, ветер ${Math.round(r.wind)} м/с`;
+  }
+  function cycleWx() {
+    const k = Object.keys(WXN); wxMode = k[(k.indexOf(wxMode) + 1) % k.length]; store.set('wxMode', wxMode); wxApply(); return WXN[wxMode];
+  }
+  // the wind's push across the screen: +1 to the right, −1 to the left (the wind blows toward wdir + 180°)
+  const windX = () => { const s = Math.sin((wx.wdir + 180 - view.az) * R); return (Math.abs(s) < .25 ? (s < 0 ? -.25 : .25) : s); };
+  const skyLit = () => clamp(1 - night + moonLight * .4 + .1, 0, 1);   // how lit the clouds and the fog are: day, the Moon, the city
+
+  /* ---- clouds: seeded by the date so tonight's clouds stay tonight's; more and puffier as the cover grows,
+     dark grey at night, silver under the Moon, white by day */
+  let clouds = null, cloudA = 0, cloudLit = -1, cloudOff = [0, 0, 0], drops = null, dropsFor = 0, flash = 0, flash2 = 0, nextFlash = 4;
+  function makeClouds(lit) {
     const k = mk(1600, 380), q = k.getContext('2d'), d0 = new Date();
     let seed = (d0.getFullYear() * 372 + d0.getMonth() * 31 + d0.getDate()) * 7919 % 2147483647 || 1;
     const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647;
-    cloudiness = .2 + rnd() * .8;
-    for (let n = 0, cnt = 2 + Math.round(cloudiness * 4); n < cnt; n++) {
-      const sx = rnd() * 1600, sy = 30 + rnd() * 320, len = 220 + rnd() * 560, th = 6 + rnd() * 16, tilt = (rnd() - .5) * .25;
+    const cv = wxT.cover, col = mix(mix([56, 54, 66], [226, 229, 244], lit), [255, 150, 116], Math.max(0, sunWarm) * .8).join(','), puff = 1 + cv * 1.5;   // sunset clouds glow pink-orange
+    cloudLit = lit;
+    for (let n = 0, cnt = 2 + Math.round(cv * 13); n < cnt; n++) {
+      const sx = rnd() * 1600, sy = 30 + rnd() * 320, len = 220 + rnd() * 560, th = (6 + rnd() * 16) * puff, tilt = (rnd() - .5) * .25;
       for (let i = 0; i < 70; i++) {
         const u = i / 70, px = sx + u * len, py = sy + u * len * tilt + Math.sin(u * 4 + n) * th * .5 + (rnd() - .5) * th * .8;
-        const r = th * (.5 + rnd()) * Math.sin(Math.PI * Math.min(1, u * 1.1 + .05)), a = (.025 + rnd() * .045);
+        const r = th * (.5 + rnd()) * Math.sin(Math.PI * Math.min(1, u * 1.1 + .05)), a = (.025 + rnd() * .045) * (1 + cv * 1.2);
         if (r <= 0) continue;
         for (const wrap of [-1600, 0, 1600]) {
           q.save(); q.translate(px + wrap, py); q.scale(2.6, 1);
           const g = q.createRadialGradient(0, 0, 0, 0, 0, r);
-          g.addColorStop(0, `rgba(214,218,240,${a})`); g.addColorStop(1, 'rgba(214,218,240,0)');
+          g.addColorStop(0, `rgba(${col},${a})`); g.addColorStop(1, `rgba(${col},0)`);
           q.fillStyle = g; q.fillRect(-r, -r, r * 2, r * 2); q.restore();
         }
       }
@@ -1242,12 +1420,13 @@ const sky = (() => {
 
   /* ---- live layer */
   const gox0 = () => smx * 16;
+  let houseL = 1, birds = [], nextBirds = 12, sunWarm = -1;
   let shoot = null, nextShoot = 6, showers = [], parts = [], smoke = [], last = 0, smx = 0, smy = 0;
   const t0 = performance.now();
-  const lampEl = $('#lamp'), aetherEl = $('#aether');
+  const lampEl = $('#lamp'), aetherEl = $('#aether'), telEl = $('#tel');
   let parked = false;
   function frame(now) {
-    if (!lampEl.hidden || !aetherEl.hidden) { parked = true; return; }   // fully covered: stop the loop, wake() starts it again
+    if (!lampEl.hidden || !aetherEl.hidden || !telEl.hidden) { parked = true; return; }   // fully covered: stop the loop, wake() starts it again
     requestAnimationFrame(frame);
     const zooming = view.fov !== fovTo;
     if (dragging || zooming) { moving = now; settled = false; }
@@ -1261,7 +1440,10 @@ const sky = (() => {
     if (groundDirty) renderGround();
     if (now - moonSpriteAt > (warp ? 250 : 60000) || Math.abs(moonC.width / dpr / moonPx() - 1) > (zooming ? .15 : .01)) renderMoonSprite();
     smx += (st.mx - smx) * .06; smy += (st.my - smy) * .06;
-    cloudA = (.45 + moonLight * .55) * (.35 + .65 * night) * .8 * clamp((view.fov - 22) / 40, 0, 1);   // magnified, the eye looks past the haze
+    const ease = 1 - Math.pow(.5, dt / 1.2);       // weather fades in, about a second per half
+    for (const k of ['cover', 'fog', 'rain', 'snow', 'storm', 'wind']) wx[k] += (wxT[k] - wx[k]) * ease;
+    wx.wdir = wxT.wdir;
+    cloudA = (.5 + wx.cover * .9) * clamp((view.fov - 10) / 40, .6, 1);   // magnified, the haze thins a little but stays
     const ox = smx * 7, oy = smy * 5;
 
     x.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1274,7 +1456,7 @@ const sky = (() => {
       const m = magAt(SMAG[i], alt); if (m > lim + .3) continue;
       const amp = reduce ? 0 : .1 + .32 * clamp(1 - alt / 35, 0, 1);
       const tw = 1 + amp * Math.sin(t * SSP[i] * (1 + 1.5 * (1 - alt / 90)) + SPH[i]) * Math.sin(t * .37 + SPH[i] * 3);
-      const a = clamp((lim + .3 - m) / 1.6, 0, 1) * clamp(tw, 0, 1.15) * (.65 + .35 * night);
+      const a = clamp((lim + .3 - m) / 1.6, 0, 1) * clamp(tw, 0, 1.15) * (.65 + .35 * night) * (1 - Math.pow(wx.cover, 2.5) * .8);
       const g = clamp(11 + (3.4 - m) * 6.6, 11, 44) * (.9 + .1 * tw), k = clamp(1.9 + (3.4 - m) * .72, 1.8, 5.4);
       const px = P[0] + ox, py = P[1] + oy, col = SCOL[i];
       x.globalAlpha = a; x.drawImage(glow[col], px - g / 2, py - g / 2, g, g);
@@ -1289,25 +1471,44 @@ const sky = (() => {
     }
     x.globalAlpha = 1;
 
+    // the Sun: a soft disc and a wide glare; low down it reddens and flattens
+    const sv2 = E.sun.eq;
+    if (bodies.sAlt > -1.5 && proj(sv2[0], sv2[1], sv2[2])) {
+      const lo = clamp(1 - bodies.sAlt / 14, 0, 1), sc = 1 - wx.cover * wx.cover * .85 - wx.fog * .4, px = P[0] + ox * .9, py = P[1] + oy * .9, r0 = moonPx() * .5;
+      const core = mix([255, 250, 236], [255, 138, 36], Math.pow(lo, 1.6)).join(','), gR = H * (.22 + .4 * lo) * (1 + wx.fog);
+      const g = x.createRadialGradient(px, py, 0, px, py, gR);
+      g.addColorStop(0, `rgba(${core},${.6 * sc})`); g.addColorStop(.07, `rgba(${core},${.28 * sc})`); g.addColorStop(.3, `rgba(${core},${.08 * sc})`); g.addColorStop(1, `rgba(${core},0)`);
+      x.fillStyle = g; x.fillRect(px - gR, py - gR, gR * 2, gR * 2);
+      const dg = x.createRadialGradient(px, py, 0, px, py, r0);         // a hot white middle, the colour at the rim
+      dg.addColorStop(0, `rgb(${mix([255, 252, 242], [255, 196, 120], lo).join(',')})`); dg.addColorStop(.75, `rgb(${core})`); dg.addColorStop(1, `rgba(${core},.85)`);
+      x.globalAlpha = clamp(sc, .1, 1); x.fillStyle = dg; x.beginPath(); x.ellipse(px, py, r0, r0 * (1 - .16 * lo * lo * lo), 0, 0, 7); x.fill(); x.globalAlpha = 1;
+    }
     // the Moon
     const mv = E.moon.eq;
     moonXY = null;
     if (bodies.mAlt > -1 && proj(mv[0], mv[1], mv[2])) {
       const ms = moonPx();                      // the sprite catches up in steps, the drawn size follows the zoom smoothly
       moonXY = [P[0] + ox * .9, P[1] + oy * .9];
-      x.globalAlpha = clamp((bodies.mAlt + 1) / 3, 0, 1);
+      x.globalAlpha = clamp((bodies.mAlt + 1) / 3, 0, 1) * (1 - Math.pow(wx.cover, 3) * .72 - wx.fog * .3);   // behind thick cloud only a glow
       x.drawImage(moonC, P[0] + ox * .9 - ms / 2, P[1] + oy * .9 - ms / 2, ms, ms);
       x.globalAlpha = 1;
     }
 
     // thin clouds drifting by, silvered by the Moon
+    const lit = skyLit(), warm = bodies.sAlt > -9 ? Math.exp(-(((bodies.sAlt - 1) / 5.5) ** 2)) * (1 - wx.cover * .5) : 0;
+    if (!clouds || Math.abs(lit - cloudLit) > .12 || Math.abs(warm - sunWarm) > .1) { sunWarm = warm; clouds = makeClouds(lit); }
     if (cloudA > .01) {
-      if (!clouds) clouds = makeClouds();
-      const cw = clouds.width, chh = clouds.height, sc = Math.max(W / cw * 1.3, .9);
-      [[.05, 2.2, 1, .85], [.32, 3.8, .74, .45]].forEach(([y0, sp, s2, al]) => {
-        const w2 = cw * sc * s2, h2 = chh * sc * s2, off = -((t * sp + y0 * 900) % w2);
-        x.globalAlpha = cloudA * al;
-        for (let k = 0; off + k * w2 < W + 40; k++) x.drawImage(clouds, off + k * w2 + ox * .8, H * y0 + oy * .8, w2, h2);
+      // three layers at fixed heights in the sky: they turn with the view, grow with the zoom and drift with the real wind
+      const cw = clouds.width, chh = clouds.height, S0 = Math.max(W, H * 1.15) / (2 * Math.tan(FOV0 / 2 * R)), sc = Math.max(W / cw * 1.3, .9) * S / S0;
+      const pan = -view.az * R * S, wv = windX() * (.5 + wx.wind / 3);
+      [[34, 2.2, 1, .85], [17, 3.8, .74, .5], [7, 5.4, .55, wx.cover * .7]].forEach(([alt, sp, s2, al], i) => {
+        if (al < .02) return;
+        cloudOff[i] += dt * sp * wv;
+        const w2 = cw * sc * s2, h2 = chh * sc * s2, y = projH(view.az, alt)[1] - h2 * .5;
+        if (y > H || y + h2 < 0) return;
+        const off = (((cloudOff[i] + pan * (1 - i * .04) + i * 900) % w2) + w2) % w2 - w2;
+        x.globalAlpha = Math.min(1, cloudA * al);
+        for (let k = 0; off + k * w2 < W + 40; k++) x.drawImage(clouds, off + k * w2 + ox * .8, y + oy * .8, w2, h2);
       });
       x.globalAlpha = 1;
     }
@@ -1339,16 +1540,17 @@ const sky = (() => {
     const gox = gox0(), goy = smy * 8;
     x.drawImage(ground, gox - MARGIN, goy, W + MARGIN * 2, H + MARGIN);
     // the moon path on the river: short glints straight below the Moon
-    if (river && bodies.mAlt > 0 && proj(mv[0], mv[1], mv[2])) {
-      const mxp = P[0] + ox * .9, a0 = E.moon.illum * clamp(bodies.mAlt / 6, 0, 1) * clamp(1.2 - bodies.mAlt / 60, .25, 1);
-      const spread = 8 + 30 * clamp(1 - bodies.mAlt / 45, 0, 1), rt = riverTop(mxp), rb = riverBot(mxp), rows = Math.round((rb - rt) / 1.8) || 0;
+    for (const [gv, gAlt, gI, gc] of [[mv, bodies.mAlt, E.moon.illum * (1 - gLight * .8), '255,246,222'], [sv2, bodies.sAlt, (1 - wx.cover * .8) * .9, bodies.sAlt < 10 ? '255,176,104' : '255,244,226']])
+    if (river && gAlt > 0 && gI > .05 && proj(gv[0], gv[1], gv[2])) {
+      const mxp = P[0] + ox * .9, a0 = gI * clamp(gAlt / 6, 0, 1) * clamp(1.2 - gAlt / 60, .25, 1);
+      const spread = 8 + 30 * clamp(1 - gAlt / 45, 0, 1), rt = riverTop(mxp), rb = riverBot(mxp), rows = Math.round((rb - rt) / 1.8) || 0;
       for (let r2 = 0; r2 < rows; r2++) {
         const u = r2 / rows, y = rt + (rb - rt) * u + 1.2, w = spread * (.35 + u * .9);
         for (let k = 0; k < 2; k++) {
           const ph = Math.sin(t * (1.3 + k * .7) + r2 * 1.93 + k * 4.1), dx = Math.sin(r2 * 12.9898 + k * 78.233 + Math.floor(t * .7 + r2) * 3.1) * w;
           const a = a0 * (.35 + .65 * Math.max(0, ph)) * (1 - Math.abs(dx) / (w + 1) * .6);
           if (a < .03 || !(y < bankAt(mxp + dx))) continue;
-          x.fillStyle = `rgba(255,246,222,${a.toFixed(3)})`; x.fillRect(mxp + dx - (3 + u * 9) / 2, y, 3 + u * 9, 1.1);
+          x.fillStyle = `rgba(${gc},${a.toFixed(3)})`; x.fillRect(mxp + dx - (3 + u * 9) / 2, y, 3 + u * 9, 1.1);
         }
       }
     }
@@ -1362,12 +1564,72 @@ const sky = (() => {
         const a = p.a * Math.max(0, 1 - p.life / 9); if (a <= 0) { smoke.splice(i, 1); continue; }
         x.fillStyle = `rgba(150,150,180,${a})`; x.beginPath(); x.arc(p.x, p.y, p.r, 0, 7); x.fill();
       }
+      houseL += ((bodies.sAlt < -2 ? 1 : 0) - houseL) * Math.min(1, dt * 2.5);
+      if (houseL < .01) houseL = 0;
+      x.globalAlpha = houseL;
       const flick = st.fire ? .75 + .25 * Math.sin(t * 13) * Math.sin(t * 7.3 + 1) + Math.random() * .1 : 1;
       const glowR = (34 + st.lamp * 60 + st.pulse * 8) * (st.fire ? .9 + .25 * flick : 1);
       const wg = x.createRadialGradient(hx + 4, hy - 8, 0, hx + 4, hy - 8, glowR);
       wg.addColorStop(0, `rgba(244,179,106,${.33 + st.lamp * .3})`); wg.addColorStop(1, 'rgba(244,179,106,0)');
       x.fillStyle = wg; x.beginPath(); x.arc(hx + 4, hy - 8, glowR, 0, 7); x.fill();
       x.fillStyle = st.fire ? `rgba(255,${170 + 40 * flick | 0},110,1)` : '#f7c182'; x.fillRect(hx + 1, hy - 11, 6, 6);
+      x.globalAlpha = 1;
+    }
+
+    if (!reduce && bodies.sAlt > -7 && bodies.sAlt < 14 && wx.rain < .3 && t > nextBirds && !birds.length) {
+      const dir = Math.random() < .5 ? -1 : 1, n = 5 + (Math.random() * 6 | 0), y0 = H * (.2 + Math.random() * .3), sp = 38 + Math.random() * 22;
+      for (let i = 0; i < n; i++) { const row = Math.ceil(i / 2), side2 = i % 2 ? 1 : -1;
+        birds.push({ x: dir > 0 ? -40 - row * 22 : W + 40 + row * 22, y: y0 + row * side2 * 11 + (Math.random() - .5) * 4, v: sp * dir, ph: Math.random() * 6, s: 3.2 + Math.random() * 1.6 }); }
+      nextBirds = t + 50 + Math.random() * 70;
+    }
+    if (birds.length) {
+      const bc = bodies.sAlt > 4 ? 'rgba(40,40,52,.75)' : 'rgba(14,12,22,.85)';
+      x.strokeStyle = bc; x.lineWidth = 1.3; x.lineCap = 'round'; x.beginPath();
+      for (let i = birds.length - 1; i >= 0; i--) {
+        const b = birds[i]; b.x += b.v * dt; b.y += Math.sin(t * .7 + b.ph) * 2 * dt; b.ph += dt * 7;
+        if (b.x < -120 - 200 || b.x > W + 320) { birds.splice(i, 1); continue; }
+        const f = Math.sin(b.ph) * b.s * .8, s = b.s;
+        x.moveTo(b.x - s, b.y - f); x.quadraticCurveTo(b.x - s * .4, b.y - f * .2 - 1, b.x, b.y); x.quadraticCurveTo(b.x + s * .4, b.y - f * .2 - 1, b.x + s, b.y - f);
+      }
+      x.stroke(); x.lineCap = 'butt';
+    }
+    const ui = .55 + .45 * st.calm;      // behind the page the weather is quieter
+    if (wx.fog > .02) {
+      const fc = mix([40, 42, 56], [150, 156, 176], lit).join(','), hz = projH(view.az, 0)[1] + goy, top = hz - H * (.16 + wx.fog * .45);
+      const g = x.createLinearGradient(0, top, 0, hz + H * .2);
+      g.addColorStop(0, `rgba(${fc},0)`); g.addColorStop(.6, `rgba(${fc},${.6 * wx.fog})`); g.addColorStop(1, `rgba(${fc},${.85 * wx.fog})`);
+      x.fillStyle = g; x.fillRect(0, top, W, H - top);
+      // slow wisps along the land, and a light veil over everything
+      const w2 = W * 1.6, h2 = H * .22, off = (((t * 6 * windX() + gox) % w2) + w2) % w2 - w2;
+      x.globalAlpha = Math.min(1, wx.fog * 1.1);
+      for (let k = 0; off + k * w2 < W + 40; k++) x.drawImage(clouds, off + k * w2, hz - h2 * .75, w2, h2);
+      x.globalAlpha = 1;
+      x.fillStyle = `rgba(${fc},${wx.fog * .16})`; x.fillRect(0, 0, W, H);
+    }
+    if ((wx.rain > .02 || wx.snow > .02) && !reduce) {
+      const snow = wxT.snow ? true : wxT.rain ? false : wx.snow > wx.rain, n = Math.round((snow ? 60 + wxT.snow * 220 : 70 + wxT.rain * 260) * Math.min(1.6, W * H / 1.4e6));
+      if (!drops || dropsFor !== W * H + n) {
+        drops = new Float32Array(n * 4); dropsFor = W * H + n;
+        for (let i = 0; i < n; i++) drops.set([Math.random() * W, Math.random() * H, .3 + Math.random() * .7, Math.random() * 6.3], i * 4);
+      }
+      const slant = clamp(windX() * wx.wind / 12, -.6, .6), dc = mix([120, 126, 150], [210, 216, 236], lit).join(',');
+      x.beginPath();
+      for (let i = 0; i < drops.length; i += 4) {
+        const z = drops[i + 2], vy = snow ? 22 + 46 * z : 420 + 560 * z;
+        drops[i + 1] += vy * dt; drops[i] += (snow ? slant * 50 + Math.sin(t * .9 + drops[i + 3]) * 14 : vy * slant) * dt * z;
+        if (drops[i + 1] > H + 20) { drops[i + 1] = -20 - Math.random() * 40; drops[i] = Math.random() * W; }
+        if (drops[i] > W + 20) drops[i] -= W + 40; else if (drops[i] < -20) drops[i] += W + 40;
+        const px = drops[i], py = drops[i + 1];
+        if (snow) { const r = .6 + z * 1.4; x.rect(px - r, py - r, r * 2, r * 2); }
+        else { const len = 8 + 16 * z; x.moveTo(px, py); x.lineTo(px - slant * len, py - len); }
+      }
+      if (snow) { x.fillStyle = `rgba(${dc},${(.5 + .3 * wx.snow) * ui})`; x.fill(); }
+      else { x.strokeStyle = `rgba(${dc},${(.22 + .2 * wx.rain) * ui})`; x.lineWidth = 1.2; x.stroke(); }
+    }
+    if (wx.storm > .5 && !reduce) {          // lightning somewhere in the clouds: a flash, often a second flicker
+      if (t > nextFlash) { flash = 1; flash2 = Math.random() < .6 ? t + .1 + Math.random() * .1 : 0; nextFlash = t + 6 + Math.random() * 16; }
+      if (flash2 && t > flash2) { flash = .75; flash2 = 0; }
+      if (flash > .01) { x.fillStyle = `rgba(206,212,255,${flash * .26 * ui})`; x.fillRect(0, 0, W, H); flash *= Math.pow(.004, dt); }
     }
 
     // released thoughts rising
@@ -1402,7 +1664,7 @@ const sky = (() => {
   /* ---- looking around (used by contemplation mode) */
   let dragging = false;
   function pan(dxPx, dyPx) {
-    const dpp = 2 * Math.atan(1 / (2 * S)) / R;       // degrees per pixel near the centre
+    const dpp = Math.atan(1 / S) / R;       // degrees per pixel near the centre
     view.az = (view.az - dxPx * dpp + 360) % 360; view.alt = clamp(view.alt + dyPx * dpp, -2, 89); view.user = true;
     dirty = groundDirty = true;
   }
@@ -1410,11 +1672,11 @@ const sky = (() => {
   // the wheel zooms toward the cursor; the buttons and keys toward the Moon when it is on screen, else the centre
   // screen point → direction on the sky (inverse of the stereographic projection)
   function unproj(sx, sy) {
-    const a = (sx - cx) / (2 * S), b = (cy - sy) / (2 * S), r2 = a * a + b * b, X = 2 * a / (1 + r2), Y = 2 * b / (1 + r2), Z = (1 - r2) / (1 + r2);
+    const a = (sx - cx) / S, b = (cy - sy) / S, n = Math.sqrt(a * a + b * b + 1), X = a / n, Y = b / n, Z = 1 / n;
     return [X * M[0] + Y * M[3] + Z * M[6], X * M[1] + Y * M[4] + Z * M[7], X * M[2] + Y * M[5] + Z * M[8]];
   }
   function zoom(f, ax, ay) {
-    fovTo = clamp(fovTo * f, 8, 105);   // wider than ~105° the landscape and the sky gradient fall apart at the edges
+    fovTo = clamp(fovTo * f, 8, 100);   // a flat lens: wider than ~100° the edges stretch
     const mOn = moonXY && bodies.mAlt > -1 && moonXY[0] > 0 && moonXY[0] < W && moonXY[1] > 0 && moonXY[1] < H;
     zoomAt = ax !== undefined ? { v: unproj(ax, ay), x: ax, y: ay } : mOn ? { v: E.moon.eq, x: moonXY[0], y: moonXY[1], glide: true } : null;
   }
@@ -1427,23 +1689,25 @@ const sky = (() => {
     if (zoomAt.glide) { zoomAt.x += (cx - zoomAt.x) * .12; zoomAt.y += (cy - zoomAt.y) * .12; }
     const v = zoomAt.v;
     for (let k = 0; k < 4; k++) {
-      const Z = M[6] * v[0] + M[7] * v[1] + M[8] * v[2]; if (Z < -.3) break;
-      const kk = 2 * S / (1 + Z), px = cx + (M[0] * v[0] + M[1] * v[1] + M[2] * v[2]) * kk, py = cy - (M[3] * v[0] + M[4] * v[1] + M[5] * v[2]) * kk;
-      const dpp = 2 * Math.atan(1 / (2 * S)) / R;
+      const Z = M[6] * v[0] + M[7] * v[1] + M[8] * v[2]; if (Z < .03) break;
+      const kk = S / Z, px = cx + (M[0] * v[0] + M[1] * v[1] + M[2] * v[2]) * kk, py = cy - (M[3] * v[0] + M[4] * v[1] + M[5] * v[2]) * kk;
+      const dpp = Math.atan(1 / S) / R;
       view.az = (view.az + (px - zoomAt.x) * dpp + 360) % 360; view.alt = clamp(view.alt - (py - zoomAt.y) * dpp, -2, 89);
       setView(date);
     }
   }
   const moonPx = () => Math.max(clamp(W * .045, 44, 72), Math.min(420, 4 * S * Math.tan(.2605 * R / 2)));   // drawn larger than life until the zoom catches up
-  function setCalm(v) { if (st.calm !== v) { st.calm = v; dirty = true; } }
+  function setCalm(v) { if (st.calm !== v) { st.calm = v; dirty = groundDirty = true; } }
   function setWarp(k) { warpBase = +skyNow(); warpReal = performance.now(); warp = k; dirty = true; }
-  function reset() { view.user = false; view.fov = fovTo = 100; zoomAt = null; layout(); const mAz = defaultAz(); view.az = (mAz - side(.36) + 360) % 360; houseAz = view.az - side(.39); riverAz = mAz - side(.1); dirty = groundDirty = true; if (warp) setWarp(0); }
+  function reset() { view.user = false; view.fov = fovTo = FOV0; zoomAt = null; layout(); const mAz = defaultAz(); view.az = (mAz - side(aimSun ? .1 : .36) + 360) % 360; houseAz = view.az - side(.39); riverAz = mAz - side(.1); dirty = groundDirty = true; if (warp) setWarp(0); }
 
   // where to look by default: at the Moon when it is up, otherwise to the south
+  let aimSun = false;
   function defaultAz() {
     const d = new Date(); setView(d);
-    const v = eph.at(d).moon.eq;
-    if (altOf(v) < 5) return 180;
+    const e0 = eph.at(d), sA = altOf(e0.sun.eq); aimSun = sA > -9 && sA < 14;     // dusk and dawn: look at the sunset
+    const v = aimSun ? e0.sun.eq : e0.moon.eq;
+    if (altOf(v) < 5 && !aimSun) return 180;
     // azimuth from the Moon's east and north components
     const L = eph.lst(d, LON) * R, f = LAT * R, sL = Math.sin(L), cL = Math.cos(L);
     const east = -sL * v[0] + cL * v[1], north = -Math.sin(f) * (cL * v[0] + sL * v[1]) + Math.cos(f) * v[2];
@@ -1454,15 +1718,347 @@ const sky = (() => {
   addEventListener('resize', resize);
   addEventListener('pointermove', e => { st.mx = e.clientX / W - .5; st.my = e.clientY / H - .5; }, { passive: true });
   resize();
-  const side = f => 2 * Math.atan(W * f / (2 * S)) / R;      // azimuth offset that puts a point f·W from the centre
-  const moonAz = defaultAz(); view.az = (moonAz - side(.36) + 360) % 360; houseAz = view.az - side(.39); riverAz = moonAz - side(.1);
+  const side = f => Math.atan(W * f / S) / R;      // azimuth offset that puts a point f·W from the centre
+  const moonAz = defaultAz(); view.az = (moonAz - side(aimSun ? .1 : .36) + 360) % 360; houseAz = view.az - side(.39); riverAz = moonAz - side(.1);
+  wxApply(); Object.assign(wx, wxT); wxFetch(); setInterval(wxFetch, 20 * 6e4); addEventListener('online', wxFetch);
   requestAnimationFrame(frame);
   const drag = on => { dragging = on; };
   const wake = () => { if (parked) { parked = false; last = 0; requestAnimationFrame(frame); } };
-  return { st, release, shower, pan, zoom, setCalm, setWarp, reset, drag, wake, now: skyNow,
+  /* ---- for the telescope: named stars, what is where, picking by a click, pointing the view */
+  const NAMED = TEL_STARS.map(([n, ra, de, ly, note]) => {
+    const v = unit(ra, de); let bi = -1, bd = Math.cos(.4 * R);
+    for (let i = 0; i < NS && SMAG[i] < 5; i++) { const d = SV[3 * i] * v[0] + SV[3 * i + 1] * v[1] + SV[3 * i + 2] * v[2]; if (d > bd) { bd = d; bi = i; } }
+    return { n, ly, note, i: bi };
+  });
+  function azOf(v) {
+    const L = eph.lst(skyNow(), LON) * R, f = LAT * R, sL = Math.sin(L), cL = Math.cos(L);
+    const east = -sL * v[0] + cL * v[1], north = -Math.sin(f) * (cL * v[0] + sL * v[1]) + Math.cos(f) * v[2];
+    return (Math.atan2(east, north) / R + 360) % 360;
+  }
+  const sv3 = i => [SV[3 * i], SV[3 * i + 1], SV[3 * i + 2]];
+  function starT(i) { const v = sv3(i), s = NAMED.find(n => n.i === i); return { k: 'star', name: s ? s.n : null, s, i, v, alt: altOf(v), az: azOf(v), mag: SMAG[i] }; }
+  function targets() {
+    if (!E) return [];
+    const fvm = 180 - E.moon.elong;
+    const o = [{ k: 'sun', name: 'Солнце', v: E.sun.eq, mag: -26.7 }, { k: 'moon', name: 'Луна', v: E.moon.eq, mag: -12.7 + .026 * fvm + 4e-9 * fvm ** 4 }];
+    E.planets.forEach(p => o.push({ k: p.k, name: PLAN[p.k][0], v: p.eq, p, mag: p.mag }));
+    o.forEach(t => { t.alt = altOf(t.v); t.az = azOf(t.v); });
+    NAMED.forEach(s => { if (s.i >= 0) o.push(starT(s.i)); });
+    return o;
+  }
+  function pick(sx, sy) {
+    if (!E) return null;
+    const ox = smx * 7, oy = smy * 5; let best = null, bd = 24 * 24;
+    for (const t of targets()) {
+      if (t.alt < -1 || !proj(t.v[0], t.v[1], t.v[2])) continue;
+      const r = t.k === 'moon' ? moonPx() / 2 + 8 : 0, d = Math.max(0, Math.hypot(P[0] + ox - sx, P[1] + oy - sy) - r) ** 2 + (t.k === 'star' ? 40 : 0);
+      if (d < bd) { bd = d; best = t; }
+    }
+    if (best) return best;
+    let bi = -1; bd = 14 * 14;
+    for (let i = 0; i < NS && SMAG[i] < lim + .3; i++) {
+      if (altOf(sv3(i)) < .3 || !proj(SV[3 * i], SV[3 * i + 1], SV[3 * i + 2])) continue;
+      const d = (P[0] + ox - sx) ** 2 + (P[1] + oy - sy) ** 2; if (d < bd) { bd = d; bi = i; }
+    }
+    return bi < 0 ? null : starT(bi);
+  }
+  function lookAt(v) {
+    view.az = azOf(v); view.alt = clamp(altOf(v), -2, 89); view.user = true; fovTo = Math.min(fovTo, 40); zoomAt = null;
+    layout(); setView(skyNow()); dirty = groundDirty = true;
+  }
+  function conOf(v) { let b = null, bd = Math.cos(22 * R); for (const k of CON) { const d = k.lab[0] * v[0] + k.lab[1] * v[1] + k.lab[2] * v[2]; if (d > bd) { bd = d; b = k.n; } } return b && b.replace(/\u2005/g, ' '); }
+  const starsApi = { n: NS, v: SV, mag: SMAG, bv: SBV };
+  return { st, release, shower, pan, zoom, setCalm, setWarp, reset, drag, wake, now: skyNow, cycleWx, wxText, wxName: () => WXN[wxMode],
+    targets, pick, lookAt, conOf, stars: () => starsApi,
     info: () => { if (E) E.planets.forEach(p => { p.name = PLAN[p.k][0]; p.up = altOf(p.eq) > 1 && magAt(p.mag, altOf(p.eq)) < lim + .5; }); return { E, bodies, view, night, lim }; } };
 })();
 
+
+
+/* ============ telescope: the eyepiece, a lit globe for every body ============ */
+const TEL_BODY = {
+  sun: { d: 1392700, f: .76, kind: 'Звезда · наше Солнце', fact: 'Пятна холоднее остальной поверхности — около 4000 °C против 5500 °C, — поэтому кажутся тёмными. Через фильтр видно, как к краю диск темнеет.' },
+  moon: { d: 3474, f: .8, kind: 'Спутник Земли', fact: 'Тёмные пятна — «моря»: застывшая лава. Лучше всего кратеры видны у границы света и тени, где тени длинные.' },
+  mercury: { d: 4879, f: .16, kind: 'Планета · ближайшая к Солнцу', fact: 'Год на Меркурии — 88 земных суток, а солнечные сутки — 176. Виден только низко в сумерках.' },
+  venus: { d: 12104, f: .26, kind: 'Планета · сестра Земли', fact: 'У Венеры есть фазы, как у Луны: их увидел Галилей, и это доказало, что планеты кружат вокруг Солнца.' },
+  mars: { d: 6779, f: .22, kind: 'Планета · красная', fact: 'Красный — от оксида железа, ржавчины в пыли. Белые полярные шапки — лёд, они тают и растут со сменой сезонов.' },
+  jupiter: { d: 139820, f: .085, kind: 'Планета-гигант', fact: 'Полосы — облака, вытянутые быстрым вращением: сутки там меньше 10 часов. Четыре точки рядом — луны Галилея, они видны даже в бинокль.' },
+  saturn: { d: 116460, f: .14, kind: 'Планета-гигант с кольцами', fact: 'Кольца — лёд и камни. Ширина почти 300 тысяч км, а толщина местами десятки метров.' }
+};
+function telSphere(size, L, alb, limb = .45) {     // a lit globe; L: light direction (x right, y down, z to us); alb(lat, lon, x, y, z) → [r, g, b]
+  const cv = document.createElement('canvas'); cv.width = cv.height = size;
+  const q = cv.getContext('2d'), img = q.createImageData(size, size), d = img.data, r = size / 2 - 1;
+  for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+    const px = (i + .5 - size / 2) / r, py = (j + .5 - size / 2) / r, rr = px * px + py * py;
+    if (rr > 1.02) continue;
+    const pz = Math.sqrt(Math.max(0, 1 - rr)), b = px * L[0] + py * L[1] + pz * L[2];
+    const lit = L ? Math.min(1, Math.max(0, (b + .04) / .14)) : 1;
+    const c = alb(Math.asin(Math.max(-1, Math.min(1, -py))), Math.atan2(px, pz), px, py, pz), k = lit * (1 - limb + limb * Math.sqrt(pz));
+    const o = 4 * (j * size + i), edge = Math.min(1, Math.max(0, (1 - Math.sqrt(rr)) * r + .5));
+    d[o] = c[0] * k; d[o + 1] = c[1] * k; d[o + 2] = c[2] * k; d[o + 3] = 255 * edge * Math.min(1, lit + .02);
+  }
+  q.putImageData(img, 0, 0); return cv;
+}
+const telNoise = (a, b, s) => Math.sin(a * 3.1 + s) * Math.sin(b * 4.7 + s * 1.7) * .5 + Math.sin(a * 7.3 + b * 2.9 + s * 2.3) * .3 + Math.sin(a * 13.1 - b * 11.7 + s) * .2;
+const TEL_ALB = {
+  jupiter: (la, lo) => {
+    const D = la * 57.3, w = telNoise(lo * 2, la * 9, 1) * 4;
+    let c = [228, 216, 192];
+    if (Math.abs(D - 13 - w * .4) < 5.5 || Math.abs(D + 14 - w * .4) < 6) c = [184, 140, 104];
+    else if (Math.abs(D) > 40) c = [190, 180, 168];
+    else if (Math.abs(D - 28) < 3 || Math.abs(D + 30) < 3) c = [204, 184, 156];
+    const gx = (lo - .5) / .28, gy = (D + 22) / 4.5;            // the Great Red Spot
+    if (gx * gx + gy * gy < 1) c = [204, 128, 96];
+    const n = 1 + telNoise(lo * 5, la * 20, 2) * .05; return c.map(v => v * n);
+  },
+  saturn: la => { const D = la * 57.3; return Math.abs(D) > 55 ? [196, 186, 150] : Math.abs(D - 20) < 6 || Math.abs(D + 20) < 6 ? [208, 182, 128] : [230, 208, 160]; },
+  mars: (la, lo) => { const D = la * 57.3; if (Math.abs(D) > 72) return [240, 238, 232]; const n = telNoise(lo * 2.3, la * 3.1, 5); return n > .15 ? [150, 82, 54] : [214, 120, 74]; },
+  venus: (la, lo) => { const n = telNoise(lo, la * 2, 7) * .03; return [242 - n * 200, 234 - n * 200, 208]; },
+  mercury: (la, lo) => { const n = telNoise(lo * 4, la * 4, 9) * .12; return [176 * (1 + n), 166 * (1 + n), 156 * (1 + n)]; },
+  sun: (la, lo, x, y, z) => {     // white-light filter: orange, darker toward the limb, grainy
+    const mu = z, I = .35 + .65 * mu, g = 1 + (Math.random() - .5) * .07;
+    return [255 * I * g, 176 * I * I * g, 80 * I * I * I * g];
+  }
+};
+const tel = (() => {
+  const box = $('#tel'), cv = $('#telCv'), q = cv.getContext('2d'), card = $('#telCard'), list = $('#telList');
+  let cur = null, N = 100, W = 0, H = 0, dpr = 1, timer = 0;
+  const R = Math.PI / 180, pad2 = n => String(n).padStart(2, '0');
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const norm = a => { const n = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / n, a[1] / n, a[2] / n]; };
+  const fmt = (v, k = 0) => v.toLocaleString('ru-RU', { maximumFractionDigits: k, minimumFractionDigits: k });
+  const COMPASS = ['север', 'северо-восток', 'восток', 'юго-восток', 'юг', 'юго-запад', 'запад', 'северо-запад'];
+  const NICE = [10, 15, 20, 25, 30, 40, 50, 60, 75, 100, 120, 150, 200, 250, 300, 400, 500, 600, 800, 1000, 1200, 1500, 2000];
+  const nice = n => NICE.reduce((a, b) => Math.abs(b - n) < Math.abs(a - n) ? b : a);
+  const starRGB = bv => bv < -.05 ? [170, 192, 255] : bv < .2 ? [206, 218, 255] : bv < .5 ? [248, 247, 255] : bv < .85 ? [255, 242, 222] : bv < 1.2 ? [255, 218, 178] : [255, 190, 140];
+  const tempOf = bv => 4600 * (1 / (.92 * bv + 1.7) + 1 / (.92 * bv + .62));
+  const classOf = T => T > 30000 ? 'O' : T > 10000 ? 'B' : T > 7500 ? 'A' : T > 6000 ? 'F' : T > 5200 ? 'G' : T > 3700 ? 'K' : 'M';
+
+  function sizeOf(t, E) {      // apparent diameter in degrees
+    const b = TEL_BODY[t.k]; if (!b) return 0;
+    const km = t.k === 'sun' ? 149.6e6 * (1 - .0167 * Math.cos((E.d - 3) / 365.26 * 2 * Math.PI)) : t.k === 'moon' ? E.moon.r * 6378 : t.p.dist * 149.6e6;
+    return 2 * Math.atan(b.d / 2 / km) / R;
+  }
+  function pickN(t, E) {
+    if (t.k === 'star') return t.name === 'Альциона' ? 20 : t.name === 'Альбирео' ? 120 : 60;
+    return nice(Math.min(2000, Math.max(10, TEL_BODY[t.k].f * 50 / sizeOf(t, E))));      // the disc fills a share f of the field
+  }
+
+  function layout() {
+    W = innerWidth; H = innerHeight; dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  }
+  const geo = () => {
+    const wide = W > 760 && W > H * 1.05;
+    return wide ? { x: W * .38, y: H * .48, r: Math.min(W * .3, H * .4) } : { x: W / 2, y: H * .26, r: Math.min(W * .42, H * .21) };
+  };
+
+  function draw() {
+    if (!cur) return;
+    const E = sky.info().E, g = geo(), x0 = g.x, y0 = g.y, Rf = g.r, fov = 50 / N;
+    const t = cur, v = t.v, day = sky.info().night < .5, isSun = t.k === 'sun';
+    q.setTransform(dpr, 0, 0, dpr, 0, 0);
+    q.fillStyle = '#020308'; q.fillRect(0, 0, W, H);
+    // the field: night blue, a pale day sky, black through the solar filter
+    q.save(); q.beginPath(); q.arc(x0, y0, Rf, 0, 7); q.clip();
+    const fg = q.createRadialGradient(x0, y0, 0, x0, y0, Rf);
+    const fc = isSun ? [4, 3, 2] : day && t.alt > 0 ? [52, 86, 140] : [6, 9, 22];
+    fg.addColorStop(0, `rgb(${fc})`); fg.addColorStop(1, `rgb(${fc.map(c => c * .6 | 0)})`);
+    q.fillStyle = fg; q.fillRect(x0 - Rf, y0 - Rf, Rf * 2, Rf * 2);
+    // a tangent frame around the target: north up, east to the left — as when facing south
+    const east = norm([-v[1], v[0], 0]), north = [v[1] * east[2] - v[2] * east[1], v[2] * east[0] - v[0] * east[2], v[0] * east[1] - v[1] * east[0]];
+    const scale = Rf / Math.tan(fov / 2 * R);
+    const at = w => { const z = dot(w, v); if (z < .9) return null; return [x0 - dot(w, east) / z * scale, y0 - dot(w, north) / z * scale]; };
+    // real stars of the catalogue in the field (not by day, not through the filter)
+    if (!isSun && !(day && t.alt > 0)) {
+      const st = sky.stars();
+      for (let i = 0; i < st.n; i++) {
+        const w = [st.v[3 * i], st.v[3 * i + 1], st.v[3 * i + 2]], p = at(w); if (!p) continue;
+        if ((p[0] - x0) ** 2 + (p[1] - y0) ** 2 > Rf * Rf) continue;
+        const m = st.mag[i], a = Math.max(.15, Math.min(1, (8.5 - m) / 5)), s = Math.max(.7, 3.6 - m * .38), c = starRGB(st.bv[i]);
+        const gl = q.createRadialGradient(p[0], p[1], 0, p[0], p[1], s * 3.2);
+        gl.addColorStop(0, `rgba(${c},${a})`); gl.addColorStop(.3, `rgba(${c},${a * .35})`); gl.addColorStop(1, `rgba(${c},0)`);
+        q.fillStyle = gl; q.fillRect(p[0] - s * 3.2, p[1] - s * 3.2, s * 6.4, s * 6.4);
+        q.fillStyle = `rgba(255,255,255,${a})`; q.beginPath(); q.arc(p[0], p[1], s * .55, 0, 7); q.fill();
+      }
+    }
+    if (!isSun && !(day && t.alt > 0)) {
+      let seed = Math.abs(Math.round(v[0] * 1e5) * 31 + Math.round(v[1] * 1e5) * 17 + Math.round(v[2] * 1e5)) % 233280 || 1;
+      const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280, n = Math.round(40 + 160 * Math.min(1, 20 / N));
+      for (let i = 0; i < n; i++) {
+        const a = rnd() * 6.283, rr = Math.sqrt(rnd()) * Rf, a2 = .12 + rnd() * rnd() * .5;
+        q.fillStyle = `rgba(220,226,255,${a2})`; q.fillRect(x0 + Math.cos(a) * rr, y0 + Math.sin(a) * rr, .9, .9);
+      }
+    }
+    // the body
+    const sv = E.sun.eq, sdx = -dot(sv, east), sdy = -dot(sv, north), sn = Math.hypot(sdx, sdy) || 1;
+    const dg = sizeOf(t, E), rd = dg / fov * Rf, size = Math.max(8, Math.round(rd * 2 * dpr));
+    const lightOf = phaseDeg => { const ph = phaseDeg * R; return [Math.sin(ph) * sdx / sn, Math.sin(ph) * sdy / sn, Math.cos(ph)]; };
+    if (t.k === 'moon') {
+      const mc = document.createElement('canvas'); mc.width = mc.height = Math.min(1100, size);
+      paintMoon(mc, sdx / sn, sdy / sn, E.moon.elong, 0, 1);
+      q.drawImage(mc, x0 - rd, y0 - rd, rd * 2, rd * 2);
+    } else if (TEL_ALB[t.k]) {
+      if (isSun) {
+        const halo = q.createRadialGradient(x0, y0, rd * .9, x0, y0, rd * 1.25);
+        halo.addColorStop(0, 'rgba(255,150,60,.25)'); halo.addColorStop(1, 'rgba(255,150,60,0)');
+        q.fillStyle = halo; q.fillRect(x0 - rd * 1.3, y0 - rd * 1.3, rd * 2.6, rd * 2.6);
+      }
+      const L = isSun ? [0, 0, 1] : lightOf(t.p ? t.p.fv : 0);
+      const ball = telSphere(Math.min(1100, size), L, TEL_ALB[t.k], isSun ? 0 : t.k === 'venus' ? .25 : .45);
+      const bq = ball.getContext('2d'), bs = ball.width;
+      if (isSun) {          // sunspots: drawn for beauty, seeded by the date
+        let seed = (Math.floor(E.d) * 9301 + 49297) % 233280;
+        const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+        bq.globalCompositeOperation = 'source-atop';
+        for (let k = 0, n = 2 + Math.floor(rnd() * 4); k < n; k++) {
+          const la = (rnd() < .5 ? -1 : 1) * (8 + rnd() * 22) * R, lo = (rnd() - .5) * 2.4, fs = Math.cos(lo);   // fs: foreshortened toward the limb
+          const gx = bs / 2 + Math.sin(lo) * Math.cos(la) * bs / 2, gy = bs / 2 - Math.sin(la) * bs / 2, big = .5 + rnd();
+          for (let s2 = 0, m = 2 + (rnd() * 6 | 0); s2 < m; s2++) {
+            const u = s2 / m, ox = (u - .5) * bs * .05 * big * fs, oy = (rnd() - .5) * bs * .012, sz = bs * (s2 === 0 ? .009 : .002 + rnd() * .005) * big;
+            const pg = bq.createRadialGradient(gx + ox, gy + oy, 0, gx + ox, gy + oy, sz * 2.2);
+            pg.addColorStop(0, 'rgba(70,24,4,.8)'); pg.addColorStop(.4, 'rgba(130,56,14,.45)'); pg.addColorStop(1, 'rgba(160,80,20,0)');
+            bq.fillStyle = pg; bq.beginPath(); bq.ellipse(gx + ox, gy + oy, sz * 2.2 * fs, sz * 2.2, 0, 0, 7); bq.fill();
+            bq.fillStyle = 'rgba(36,10,2,.85)'; bq.beginPath(); bq.ellipse(gx + ox, gy + oy, sz * .55 * fs, sz * .55, rnd(), 0, 7); bq.fill();
+          }
+        }
+        bq.globalCompositeOperation = 'source-over';
+      }
+      if (t.k === 'saturn') {
+        // ring tilt seen from the Earth: B from the ring pole (i = 28.08°, Ω = 169.51°)
+        const lam = t.p.elon * R, bet = t.p.elat * R, ii = 28.08 * R, Om = 169.51 * R;
+        const sB = Math.sin(ii) * Math.cos(bet) * Math.sin(lam - Om) - Math.cos(ii) * Math.sin(bet), k = Math.max(.012, Math.abs(sB));
+        const rings = half => {
+          q.save(); q.beginPath();
+          if (half < 0) q.rect(x0 - rd * 3, y0 - rd * 3, rd * 6, rd * 3); else q.rect(x0 - rd * 3, y0, rd * 6, rd * 3);
+          q.clip(); q.translate(x0, y0); q.scale(1, k);
+          [[1.24, 1.53, 'rgba(150,135,110,.35)'], [1.53, 1.95, 'rgba(226,206,160,.9)'], [2.03, 2.27, 'rgba(200,182,140,.75)']].forEach(([a, b, c]) => {
+            q.fillStyle = c; q.beginPath(); q.arc(0, 0, rd * b, 0, 7); q.arc(0, 0, rd * a, 0, 7, true); q.fill();
+          });
+          q.restore();
+        };
+        rings(sB > 0 ? -1 : 1);                     // the far half of the rings, behind the globe
+        q.drawImage(ball, x0 - rd, y0 - rd, rd * 2, rd * 2);
+        rings(sB > 0 ? 1 : -1);
+        cur.ringB = Math.asin(sB) / R;
+      } else q.drawImage(ball, x0 - rd, y0 - rd, rd * 2, rd * 2);
+      if (t.k === 'jupiter') {     // the Galilean moons (Meeus, low accuracy): X in Jupiter radii, west to the right
+        const d = E.d - 1.5, V = (172.74 + .00111588 * d) * R, M = (357.529 + .9856003 * d) * R, Nn = (20.02 + .0830853 * d + .329 * Math.sin(V) / R * R) * R;
+        const J = (66.115 + .9025179 * d - .329 * Math.sin(V)) * R, A = (1.915 * Math.sin(M) + .02 * Math.sin(2 * M)) * R, B = (5.555 * Math.sin(Nn) + .168 * Math.sin(2 * Nn)) * R;
+        const K = J + A - B, Rr = 1.00014 - .01671 * Math.cos(M), rj = 5.20872 - .25208 * Math.cos(Nn), Dl = Math.sqrt(rj * rj + Rr * Rr - 2 * rj * Rr * Math.cos(K));
+        const psi = Math.asin(Rr / Dl * Math.sin(K)), dd = d - Dl / 173;
+        [['Ио', 163.8069, 203.4058646, 5.9057], ['Европа', 358.414, 101.2916335, 9.3966], ['Ганимед', 5.7176, 50.234518, 14.9883], ['Каллисто', 224.8092, 21.48798, 26.3627]].forEach(([nm, u0, nu, rr]) => {
+          const u = (u0 + nu * dd) * R + psi - B, X = rr * Math.sin(u), behind = Math.cos(u) < 0 && Math.abs(X) < 1;
+          const px = x0 + X * rd, py = y0;
+          if (behind || (px - x0) ** 2 > Rf * Rf * .96) return;
+          q.fillStyle = 'rgba(255,248,232,.95)'; q.beginPath(); q.arc(px, py, Math.max(1.4, rd * .03), 0, 7); q.fill();
+          q.font = '500 10px "JetBrains Mono", monospace'; q.fillStyle = 'rgba(200,206,236,.55)'; q.textAlign = 'center'; q.fillText(nm, px, py + 16);
+        });
+      }
+    } else {
+      // a star: even in a telescope only a point — a soft glow and a thin diffraction ring
+      const c = starRGB(sky.stars().bv[t.i]), m = t.mag, s = Math.max(2.2, 7 - m * 1.1);
+      const pair = t.name === 'Альбирео' ? [[-s * 5, 0, c, 1], [s * 5, -s * 1.6, [150, 180, 255], .55]] : [[0, 0, c, 1]];
+      pair.forEach(([dx, dy, cc, a]) => {
+        const gl = q.createRadialGradient(x0 + dx, y0 + dy, 0, x0 + dx, y0 + dy, s * 6 * a);
+        gl.addColorStop(0, `rgba(255,255,255,${a})`); gl.addColorStop(.12, `rgba(${cc},${.9 * a})`); gl.addColorStop(.4, `rgba(${cc},${.18 * a})`); gl.addColorStop(1, `rgba(${cc},0)`);
+        q.fillStyle = gl; q.beginPath(); q.arc(x0 + dx, y0 + dy, s * 6 * a, 0, 7); q.fill();
+        q.strokeStyle = `rgba(${cc},${.18 * a})`; q.lineWidth = 1; q.beginPath(); q.arc(x0 + dx, y0 + dy, s * 1.9 * a, 0, 7); q.stroke();
+      });
+    }
+    q.restore();
+    // the eyepiece: a soft dark edge and a thin rim
+    const vg = q.createRadialGradient(x0, y0, Rf * .82, x0, y0, Rf);
+    vg.addColorStop(0, 'rgba(2,3,8,0)'); vg.addColorStop(1, 'rgba(2,3,8,.85)');
+    q.fillStyle = vg; q.beginPath(); q.arc(x0, y0, Rf, 0, 7); q.fill();
+    q.strokeStyle = 'rgba(186,196,255,.16)'; q.lineWidth = 1; q.beginPath(); q.arc(x0, y0, Rf + 6, 0, 7); q.stroke();
+    q.font = '500 10.5px "JetBrains Mono", monospace'; q.fillStyle = 'rgba(200,206,236,.5)'; q.textAlign = 'center';
+    q.fillText(`×${N} · поле ${fov >= 1 ? fmt(fov, 1) + '°' : Math.round(fov * 60) + '′'}${isSun ? ' · солнечный фильтр' : ''}`, x0, y0 + Rf + 28);
+    q.fillText('С', x0, y0 - Rf - 14); q.fillText('В', x0 - Rf - 16, y0 + 4);
+  }
+
+  function info() {
+    const t = cur, E = sky.info().E, rows = [], dir = COMPASS[Math.round(t.az / 45) % 8], day = sky.info().night < .5;
+    const b = TEL_BODY[t.k], kind = b ? b.kind : 'Звезда';
+    let fact = b ? b.fact : t.s ? t.s.note : '', warn = '';
+    rows.push(['Где', t.alt > 0 ? `${fmt(t.alt)}° над горизонтом, ${dir}` : `под горизонтом (${fmt(-t.alt)}°)`]);
+    if (t.k !== 'sun') rows.push(['Блеск', `${t.mag < 0 ? '−' : ''}${fmt(Math.abs(t.mag), 1)}m`]);
+    if (t.k === 'sun') {
+      rows.push(['Расстояние', `${fmt(149.6, 1)} млн км · свет идёт 8 мин 20 с`]);
+      rows.push(['Размер на небе', `${fmt(sizeOf(t, E) * 60)}′`]);
+      warn = 'Надет солнечный фильтр. Без него смотреть на Солнце в телескоп или бинокль нельзя: за секунду можно повредить глаза. Пятна здесь нарисованы для красоты — настоящие меняются каждый день.';
+    } else if (t.k === 'moon') {
+      const km = E.moon.r * 6378;
+      rows.push(['Расстояние', `${fmt(Math.round(km / 100) * 100)} км · свет идёт ${fmt(km / 299792, 2)} с`]);
+      rows.push(['Освещена', `${Math.round(E.moon.illum * 100)}%`]);
+      rows.push(['Размер на небе', `${fmt(sizeOf(t, E) * 60)}′`]);
+    } else if (t.p) {
+      const km = t.p.dist * 149.6e6, lm = t.p.dist * 8.317;
+      rows.push(['Расстояние', `${fmt(km / 1e6)} млн км · свет идёт ${lm < 60 ? fmt(lm) + ' мин' : fmt(Math.floor(lm / 60)) + ' ч ' + fmt(Math.round(lm % 60)) + ' мин'}`]);
+      rows.push(['Размер на небе', `${fmt(sizeOf(t, E) * 3600, 1)}″`]);
+      if (t.k === 'venus' || t.k === 'mercury' || t.k === 'mars') rows.push(['Освещена', `${Math.round(t.p.illum * 100)}%`]);
+      if (t.k === 'saturn' && cur.ringB != null) rows.push(['Наклон колец', `${fmt(Math.abs(cur.ringB), 1)}°${Math.abs(cur.ringB) < 4 ? ' — почти ребром' : ''}`]);
+    } else {
+      const bv = sky.stars().bv[t.i], T = tempOf(bv);
+      if (t.s) rows.push(['Расстояние', `${fmt(t.s.ly, t.s.ly < 20 ? 1 : 0)} св. лет`]);
+      rows.push(['Цвет', `класс ${classOf(T)} · около ${fmt(Math.round(T / 100) * 100)} K`]);
+      const cn = sky.conOf(t.v); if (cn) rows.push(['Созвездие', cn]);
+      if (!t.s) fact = 'Даже в самый сильный телескоп звезда остаётся точкой: она слишком далеко. Зато виден её настоящий цвет.';
+    }
+    if (t.alt < 0 && t.k !== 'sun') warn = 'Сейчас под горизонтом — так объект выглядел бы, если бы Земля не мешала.';
+    else if (t.k === 'sun' && t.alt < 0) warn = 'Солнце сейчас под горизонтом. ' + warn;
+    else if (day && t.k === 'star' && t.alt > 0) warn = 'Днём звёзды тонут в голубом небе. Яркие можно поймать в телескоп, но глазом не видно.';
+    card.innerHTML = `<p class="tel-kind">${kind}</p><h3>${t.name || 'Звезда без имени'}</h3>`
+      + `<dl>${rows.map(([a, b2]) => `<dt>${a}</dt><dd>${b2}</dd>`).join('')}</dl>`
+      + (fact ? `<p class="tel-fact">${fact}</p>` : '') + (warn ? `<p class="tel-warn">${warn}</p>` : '')
+      + `<p class="tel-hint">колесо или + − — увеличение · ← → — другие объекты · Esc — к небу</p>`;
+  }
+
+  let choices = [];
+  function fillList() {
+    const all = sky.targets(), day = sky.info().night < .5, lim = sky.info().lim;
+    choices = all.filter(t => t.alt > 0 && (t.k === 'sun' ? day : t.k === 'moon' || (t.p ? (day ? t.mag < -1 : t.mag < lim + 1) : !day && t.mag < Math.min(2.6, lim))))
+      .sort((a, b) => a.mag - b.mag).slice(0, 12);
+    if (cur && !choices.some(c => c.name === cur.name && c.k === cur.k)) choices.push(cur);
+    list.innerHTML = choices.map((c, i) => `<button type="button" data-i="${i}" aria-pressed="${!!cur && c.name === cur.name && c.k === cur.k}">${c.name || 'звезда'}</button>`).join('');
+  }
+  list.addEventListener('click', e => { const b = e.target.closest('button'); if (b) show(choices[+b.dataset.i]); });
+
+  function show(t) {
+    if (!t) return;
+    cur = t; N = pickN(t, sky.info().E); cur.ringB = null;
+    sky.lookAt(t.v);
+    draw(); info(); fillList();
+  }
+  function open(t) {
+    layout(); box.hidden = false; document.documentElement.classList.add('tel-open');
+    if (!t) { const all = sky.targets(), day = sky.info().night < .5;
+      t = all.find(x => x.k === 'moon' && x.alt > 0) || (day && all.find(x => x.k === 'sun' && x.alt > 0))
+        || all.filter(x => x.p && x.alt > 3).sort((a, b) => a.mag - b.mag)[0] || all.filter(x => x.k === 'star' && x.alt > 5).sort((a, b) => a.mag - b.mag)[0] || all[1]; }
+    show(t); clearInterval(timer); timer = setInterval(() => { if (cur) { const f = sky.targets().find(x => x.k === cur.k && x.name === cur.name); if (f) { Object.assign(cur, { alt: f.alt, az: f.az, v: f.v, p: f.p }); } draw(); info(); } }, 30000);
+    $('#telBack').focus({ preventScroll: true });
+  }
+  function close() {
+    if (box.hidden) return;
+    box.hidden = true; document.documentElement.classList.remove('tel-open'); clearInterval(timer); cur = null; sky.wake();
+  }
+  function zoomN(f) { if (!cur) return; const i = NICE.indexOf(nice(N)); N = NICE[Math.max(0, Math.min(NICE.length - 1, i + (f > 1 ? 1 : -1)))]; draw(); }
+  function step(k) { if (!choices.length) return; const i = choices.findIndex(c => cur && c.name === cur.name && c.k === cur.k); show(choices[(i + k + choices.length) % choices.length]); }
+  box.addEventListener('wheel', e => { e.preventDefault(); zoomN(e.deltaY < 0 ? 1.25 : .8); }, { passive: false });
+  addEventListener('resize', () => { if (!box.hidden) { layout(); draw(); } });
+  $('#telBack').addEventListener('click', close);
+  addEventListener('keydown', e => {
+    if (box.hidden) return;
+    if (e.key === 'Escape') { e.stopImmediatePropagation(); e.preventDefault(); return close(); }
+    if (e.key === 'ArrowRight') { e.stopImmediatePropagation(); return step(1); }
+    if (e.key === 'ArrowLeft') { e.stopImmediatePropagation(); return step(-1); }
+    if (e.key === '+' || e.key === '=') { e.stopImmediatePropagation(); return zoomN(1.25); }
+    if (e.key === '-' || e.key === '_') { e.stopImmediatePropagation(); return zoomN(.8); }
+    if (e.key !== 'Tab') e.stopImmediatePropagation();
+  }, true);
+  return { open, close, get on() { return !box.hidden; } };
+})();
+$('#calmTel').addEventListener('click', () => tel.open());
 
 /* ============ clock & hero ============ */
 const cyc = { mode: store.get('mode', 'wake'), wake: store.get('wake', '07:00'), lat: store.get('lat', 15), sel: null };
@@ -2322,8 +2918,9 @@ function calmCaption() {
   if (i.bodies.mAlt > 0) up.push('Луна');
   i.E.planets.forEach(p => { if (p.up) up.push(p.name); });
   const d = sky.now(), t = hm(d), warpTxt = calm.warp ? `<small>время ×600 · на часах неба ${t}</small>` : '';
-  const mag = 100 / i.view.fov, magTxt = mag > 1.2 ? `<small>увеличение ×${mag < 10 ? mag.toFixed(1).replace('.', ',') : Math.round(mag)} · поле зрения ${Math.round(i.view.fov)}°</small>` : '';
-  $('#calmCap').innerHTML = (up.length ? `Над Ростовом сейчас ${up.join(', ').replace(/, ([^,]*)$/, ' и $1')}` : 'Над Ростовом сейчас только звёзды') + warpTxt + magTxt
+  const mag = 80 / i.view.fov, magTxt = mag > 1.2 ? `<small>увеличение ×${mag < 10 ? mag.toFixed(1).replace('.', ',') : Math.round(mag)} · поле зрения ${Math.round(i.view.fov)}°</small>` : '';
+  const wt = sky.wxText(), wxTxt = wt ? `<small>${wt}</small>` : '';
+  $('#calmCap').innerHTML = (up.length ? `Над Ростовом сейчас ${up.join(', ').replace(/, ([^,]*)$/, ' и $1')}` : 'Над Ростовом сейчас только звёзды') + wxTxt + warpTxt + magTxt
     + (calm.warp ? '' : touchy ? '<small>потяни небо пальцем</small>' : mag > 1.2 ? '' : '<small>потяни небо · колесо или + − ближе · двойной клик — к Луне</small>');
 }
 function calmOn(auto = false) {
@@ -2351,6 +2948,9 @@ $('#calmReset').addEventListener('click', () => sky.reset());
 $('#calmIn').addEventListener('click', () => sky.zoom(1 / 1.6));
 $('#calmOut').addEventListener('click', () => sky.zoom(1.6));
 $('#calmWarp').addEventListener('click', toggleWarp);
+function cycleWx() { $('#calmWx').textContent = sky.cycleWx(); calmCaption(); }
+$('#calmWx').textContent = sky.wxName();
+$('#calmWx').addEventListener('click', cycleWx);
 { // look around: drag to turn, wheel to zoom, double click to come back to the Moon
   const cv = $('#sky'); let last = null;
   cv.addEventListener('pointerdown', e => { if (!calm.on) return; last = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); docEl.classList.add('dragging'); sky.drag(true); });
@@ -2359,7 +2959,14 @@ $('#calmWarp').addEventListener('click', toggleWarp);
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   // mouse wheel: about 15 % a notch; a touchpad pinch arrives as ctrl+wheel with small steps
   cv.addEventListener('wheel', e => { if (!calm.on) return; e.preventDefault(); sky.zoom(Math.exp(Math.max(-300, Math.min(300, e.deltaY)) * (e.ctrlKey ? .012 : .0014)), e.clientX, e.clientY); stillSoon(); }, { passive: false });
-  cv.addEventListener('dblclick', () => calm.on && sky.reset());
+  let clickT = 0, downAt = null;
+  cv.addEventListener('pointerdown', e => { downAt = [e.clientX, e.clientY]; });
+  cv.addEventListener('click', e => {
+    if (!calm.on || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+    const t = sky.pick(e.clientX, e.clientY); if (!t) return;
+    clearTimeout(clickT); clickT = setTimeout(() => tel.open(t), 260);
+  });
+  cv.addEventListener('dblclick', () => { clearTimeout(clickT); calm.on && sky.reset(); });
 }
 { // after a quiet while the page turns into the sky by itself
   let quiet = Date.now();
@@ -2375,6 +2982,8 @@ addEventListener('keydown', e => {
   if (calm.on) {
     if (e.key === 'Escape') return calmOff();
     if (e.key === 't' || e.key === 'е') return toggleWarp();
+    if (e.key === 'w' || e.key === 'ц') return cycleWx();
+    if (e.key === 'o' || e.key === 'щ') return tel.open();
     if (e.key === '+' || e.key === '=') { stillSoon(); return sky.zoom(1 / 1.6); }
     if (e.key === '-' || e.key === '_') { stillSoon(); return sky.zoom(1.6); }
     stillSoon(); return;
