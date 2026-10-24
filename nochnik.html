@@ -986,6 +986,39 @@ const TEL_STARS = [
   ['Мира', 34.837, -2.978, 300, '«Удивительная»: за 11 месяцев то видна глазом, то пропадает.']
 ];
 
+// one bird in flight, a silhouette: wings in two parts (arm and hand) that bend at the wrist,
+// a fast downstroke, a slower upstroke with the hand folded in, and glides with the wings held in a shallow V
+function birdPose(p, glide) {
+  if (glide) return { e: .18, fold: 0 };
+  if (p < .42) return { e: Math.cos(Math.PI * p / .42), fold: 0 };                       // down: +1 → −1, fast
+  const u = (p - .42) / .58; return { e: -Math.cos(Math.PI * u), fold: Math.sin(Math.PI * u) * .55 };   // up: slow, hand tucked
+}
+function drawBird(q, x, y, s, pose, dir, tilt) {
+  const { e, fold } = pose;
+  q.save(); q.translate(x, y); q.rotate(tilt);
+  for (const sg of [-1, 1]) {
+    q.beginPath();
+    const a1 = e * .62, a2 = e * 1.05 - fold * .35 * e;                                    // the hand swings further than the arm
+    const sx = sg * s * .04, sy = 0;
+    const wx = sx + sg * Math.cos(a1) * s * .2, wy = sy - Math.sin(a1) * s * .2;
+    const hl = s * .29 * (1 - fold * .5), tx = wx + sg * Math.cos(a2) * hl, ty = wy - Math.sin(a2) * hl;
+    const ch = s * .09 * (1 - fold * .3);                                                  // chord: how deep the wing is at the wrist
+    q.moveTo(sx, sy - s * .012);
+    q.quadraticCurveTo((sx + wx) / 2, (sy + wy) / 2 - s * .03, wx, wy);                     // leading edge, a little arched
+    q.quadraticCurveTo((wx + tx) / 2 + sg * s * .02, (wy + ty) / 2 - s * .015, tx, ty);       // out to the pointed tip
+    q.quadraticCurveTo(wx + sg * hl * .35 * Math.cos(a2), wy + ch * .9 - Math.sin(a2) * hl * .3, wx - sg * s * .01, wy + ch);   // trailing edge of the hand
+    q.quadraticCurveTo((sx + wx) / 2, (sy + wy) / 2 + ch * 1.05, sx, sy + s * .055);         // trailing edge of the arm
+    q.closePath(); q.fill();
+  }
+  q.beginPath();
+  // body with the head forward and a short wedge of tail
+  q.ellipse(dir * s * .01, s * .02, s * .1, s * .034, 0, 0, 7);
+  q.moveTo(dir * s * .1, s * .012); q.arc(dir * s * .115, s * .008, s * .028, 0, 7);
+  q.moveTo(-dir * s * .08, s * .01); q.lineTo(-dir * s * .17, -s * .005); q.lineTo(-dir * s * .17, s * .05); q.closePath();
+  q.fill();
+  q.restore();
+}
+
 /* ============ sky: the real sky over Rostov, drawn in layers ============ */
 // base   — gradient, twilight, Milky Way, faint stars, constellations, planets; redrawn every few seconds as the Earth turns
 // ground — hills, poplars and the house; redrawn only when the view changes
@@ -1607,22 +1640,31 @@ const sky = (() => {
       x.globalAlpha = 1;
     }
 
+    // a flock going home at dusk or out at dawn: a loose V, each bird with its own wingbeat, now and then a glide
     if (!reduce && bodies.sAlt > -7 && bodies.sAlt < 14 && wx.rain < .3 && t > nextBirds && !birds.length) {
-      const dir = Math.random() < .5 ? -1 : 1, n = 5 + (Math.random() * 6 | 0), y0 = H * (.2 + Math.random() * .3), sp = 38 + Math.random() * 22;
-      for (let i = 0; i < n; i++) { const row = Math.ceil(i / 2), side2 = i % 2 ? 1 : -1;
-        birds.push({ x: dir > 0 ? -40 - row * 22 : W + 40 + row * 22, y: y0 + row * side2 * 11 + (Math.random() - .5) * 4, v: sp * dir, ph: Math.random() * 6, s: 3.2 + Math.random() * 1.6 }); }
-      nextBirds = t + 50 + Math.random() * 70;
+      const dir = Math.random() < .5 ? -1 : 1, n = 6 + (Math.random() * 9 | 0), k = .7 + Math.random() * .8;      // k: how near the flock is
+      const y0 = H * (.18 + Math.random() * .28), sp = (32 + Math.random() * 14) * k, climb = (Math.random() - .5) * .12;
+      for (let i = 0; i < n; i++) {
+        const row = Math.ceil(i / 2), side2 = i % 2 ? 1 : -1, s = (24 + Math.random() * 7) * k;
+        birds.push({ x: (dir > 0 ? -60 : W + 60) - dir * (row * s * 1.5 + Math.random() * s * .6), y: y0 + side2 * row * s * .55 + (Math.random() - .5) * s * .5,
+          v: sp * dir * (.97 + Math.random() * .06), climb, s, dir, p: Math.random(), f: 2.6 + Math.random() * 1.1, glide: false, tm: .4 + Math.random() * 2,
+          e: 0, fold: 0, ph: Math.random() * 6, far: 1 - (k - .7) / .8 });
+      }
+      nextBirds = t + 45 + Math.random() * 75;
     }
     if (birds.length) {
-      const bc = bodies.sAlt > 4 ? 'rgba(40,40,52,.75)' : 'rgba(14,12,22,.85)';
-      x.strokeStyle = bc; x.lineWidth = 1.3; x.lineCap = 'round'; x.beginPath();
+      const lit = clamp(bodies.sAlt / 10 + .3, 0, 1), base = mix([16, 14, 24], [34, 34, 44], lit);
       for (let i = birds.length - 1; i >= 0; i--) {
-        const b = birds[i]; b.x += b.v * dt; b.y += Math.sin(t * .7 + b.ph) * 2 * dt; b.ph += dt * 7;
-        if (b.x < -120 - 200 || b.x > W + 320) { birds.splice(i, 1); continue; }
-        const f = Math.sin(b.ph) * b.s * .8, s = b.s;
-        x.moveTo(b.x - s, b.y - f); x.quadraticCurveTo(b.x - s * .4, b.y - f * .2 - 1, b.x, b.y); x.quadraticCurveTo(b.x + s * .4, b.y - f * .2 - 1, b.x + s, b.y - f);
+        const b = birds[i];
+        b.tm -= dt; if (b.tm < 0) { b.glide = !b.glide; b.tm = b.glide ? .7 + Math.random() * 1.2 : 1.4 + Math.random() * 2.2; }
+        if (!b.glide || b.e < .6) b.p = (b.p + dt * b.f) % 1;                                     // finish the beat before gliding
+        const tp = birdPose(b.p, b.glide && b.e < .6 && b.e > -.2), sm = Math.min(1, dt * 22);
+        b.e += (tp.e - b.e) * sm; b.fold += (tp.fold - b.fold) * sm;
+        b.x += b.v * dt; b.y += (b.v * b.climb * b.dir + Math.sin(t * .6 + b.ph) * 3 - (b.glide ? -2 : b.e * 4)) * dt;   // a downstroke lifts, a glide sinks a little
+        if (b.dir > 0 ? b.x > W + 120 : b.x < -120) { birds.splice(i, 1); continue; }
+        x.fillStyle = rgb(mix(base, horizonCol, b.far * .35));                                    // farther birds a touch paler in the haze
+        drawBird(x, b.x + ox * .7, b.y + oy * .7, b.s, b, b.dir, Math.sin(t * .5 + b.ph) * .05);
       }
-      x.stroke(); x.lineCap = 'butt';
     }
     const ui = .55 + .45 * st.calm;      // behind the page the weather is quieter
     if (wx.fog > .02) {
