@@ -41,9 +41,11 @@ SCEN = {
           lambda r: r == '1|23:30-07:10|Ночь записана в дневник'),
  'diary-save': (False, 3000, 'setTimeout(function(){location.hash="diary";setTimeout(function(){$("#dSave").click();setTimeout(function(){done(document.querySelectorAll("#dChart .bar").length+"|"+$("#dEx").hidden)},300)},300)},300);',
           lambda r: r == '1|true'),
+ 'no-sleep': (False, 3000, 'setTimeout(function(){location.hash="diary";setTimeout(function(){$("#dNoSleep").click();setTimeout(function(){done(document.querySelectorAll("#dChart rect.ns").length+"|"+$("#dNoSleep").getAttribute("aria-pressed")+"|"+$("#dStats").textContent.indexOf("8 ч")+"|"+JSON.parse(localStorage.getItem("nochnik.diary"))[0].ns)},300)},300)},300);',
+          lambda r: r.startswith('1|true|') and r.endswith('|true') and r.split('|')[2] != '-1'),  # a sleepless night: 0 h on the chart, 8 h of debt
  'release': (False, 3000, 'setTimeout(function(){$(".item .rel").click();setTimeout(function(){done(document.querySelectorAll(".item").length+"|"+localStorage.getItem("nochnik.released"))},900)},300);',
           lambda r: r == '2|1'),
- 'rasp (сеть)': (False, 20000, 'setTimeout(function(){$("#raspBtn").click();setTimeout(function(){done($("#toastTxt").textContent.slice(0,31)+"|"+!!localStorage.getItem("nochnik.raspAt"))},12000)},300);',
+ 'rasp (сеть)': (True, 20000, 'setTimeout(function(){$("#raspBtn").click();setTimeout(function(){done($("#toastTxt").textContent.slice(0,31)+"|"+!!localStorage.getItem("nochnik.raspAt"))},12000)},300);',
           lambda r: r == 'Подъём заполнен по расписанию: |true'),  # needs internet and edu.donstu.ru
 }
 

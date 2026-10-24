@@ -306,6 +306,9 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radiu
 #dChart .q3{fill:var(--rem)}
 #dChart .q2,#dChart .q1{fill:var(--lamp-deep)}
 #dChart .ex{opacity:.5}
+#dNoSleep[aria-pressed="true"]{color:var(--lamp);border-color:rgba(244,179,106,.42)}
+#dChart .ns{fill:none;stroke:var(--lamp-deep);stroke-width:1.2;stroke-dasharray:3 3}
+#dChart .ns-t{fill:var(--lamp-deep);font:10px var(--mono)}
 #dChart .target{stroke:var(--lamp);stroke-width:1;stroke-dasharray:4 4;opacity:.7}
 #dChart .tt{fill:var(--lamp);font:11px var(--mono)}
 #dChart .dur{fill:var(--ink);font:600 10px var(--mono)}
@@ -613,6 +616,7 @@ html.lamp-on .app,html.lamp-on #sky,html.lamp-on .grain,html.lamp-on .mini,html.
         <label class="field">Встал <input type="time" id="dWake" value="07:00"></label>
         <div class="field">Как спал <div class="rate" id="dRate" role="group" aria-label="Оценка сна"></div></div>
         <button class="btn primary" type="submit" id="dSave">Сохранить ночь</button>
+        <button class="btn" type="button" id="dNoSleep" title="Ночь без сна: считается как 0 часов">Не спал</button>
         <button class="btn" type="button" id="dDel" hidden>Удалить</button>
         <button class="btn" type="button" id="dCopy">Скопировать дневник</button>
       </form>
@@ -2030,13 +2034,15 @@ if (!diary) {
   const ex = [['00:40', '07:00', 3], ['01:30', '07:10', 2], ['23:50', '07:00', 5], ['02:10', '08:30', 2], ['00:15', '07:05', 4], ['01:05', '10:40', 4], ['01:40', '07:00', 2]];
   diary = ex.map(([b, w, q], i) => { const d = new Date(base); d.setDate(d.getDate() - 7 + i); return { date: iso(d), bed: b, wake: w, q, ex: true }; });
 }
-const nightDur = e => { const b = rel(toMin(e.bed)); let w = rel(toMin(e.wake)); if (w <= b) w += 1440; return w - b; };
+const nightDur = e => { if (e.ns) return 0; const b = rel(toMin(e.bed)); let w = rel(toMin(e.wake)); if (w <= b) w += 1440; return w - b; };
 function defaultNight() { const d = new Date(); if (d.getHours() < 14) d.setDate(d.getDate() - 1); return iso(d); }
 function renderRate() { $('#dRate').innerHTML = [1, 2, 3, 4, 5].map(n => `<button type="button" data-q="${n}" aria-pressed="${n <= dq}" aria-label="${n} из 5"><i></i></button>`).join(''); }
 function fillForm(date) {
   const e = diary.find(x => x.date === date && !x.ex);
   $('#dDate').value = date;
-  if (e) { $('#dBed').value = e.bed; $('#dWake').value = e.wake; dq = e.q; }
+  if (e && !e.ns) { $('#dBed').value = e.bed; $('#dWake').value = e.wake; }
+  if (e) dq = e.q;
+  $('#dNoSleep').setAttribute('aria-pressed', !!(e && e.ns));
   $('#dDel').hidden = !e; $('#dSave').textContent = e ? 'Обновить ночь' : 'Сохранить ночь';
   renderRate();
 }
@@ -2045,7 +2051,7 @@ function renderDiary() {
   const last = new Date(defaultNight() + 'T12:00'), days = [];
   for (let i = 13; i >= 0; i--) { const d = new Date(last); d.setDate(d.getDate() - i); days.push(iso(d)); }
   const shown = days.map(d => diary.find(e => e.date === d)).filter(Boolean);
-  const durs = shown.map(nightDur), beds = shown.map(e => rel(toMin(e.bed)));
+  const durs = shown.map(nightDur), beds = shown.filter(e => !e.ns).map(e => rel(toMin(e.bed)));   // no bedtime on a sleepless night
   const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
   const avg = durs.length ? mean(durs) : 0, mb = beds.length ? mean(beds) : 0;
   const sd = beds.length > 1 ? Math.sqrt(mean(beds.map(b => (b - mb) ** 2))) : 0;
@@ -2053,7 +2059,7 @@ function renderDiary() {
   const debt = days.slice(-7).map(d => diary.find(e => e.date === d)).filter(Boolean).reduce((a, e) => a + Math.max(0, 480 - nightDur(e)), 0);
   $('#dStats').innerHTML = shown.length ? `
     <div class="dstat"><span class="l">в среднем спишь</span><span class="v">${dur(avg)}</span><span class="chip-s ${avg >= 420 ? 'good' : 'warn'}">${avg >= 420 ? 'в норме для взрослого' : 'меньше 7 часов'}</span></div>
-    <div class="dstat"><span class="l">отбой в среднем</span><span class="v">${clockOf(mb)}</span><span class="chip-s ${sd <= 45 ? 'good' : 'warn'}">разброс ±${Math.round(sd)} мин${sd > 45 ? ', ритм сбивается' : ''}</span></div>
+    <div class="dstat"><span class="l">отбой в среднем</span><span class="v">${beds.length ? clockOf(mb) : '—'}</span>${beds.length < 2 ? `<span class="chip-s">${beds.length ? 'нужно больше ночей' : 'ночи без сна'}</span>` : `<span class="chip-s ${sd <= 45 ? 'good' : 'warn'}">разброс ±${Math.round(sd)} мин${sd > 45 ? ', ритм сбивается' : ''}</span>`}</div>
     <div class="dstat"><span class="l">недосып за 7 ночей</span><span class="v">${debt ? dur(debt) : '0'}</span><span class="chip-s ${debt <= 120 ? 'good' : 'warn'}">от нормы 8 часов</span></div>
     <div class="dstat"><span class="l">оценка сна</span><span class="v">${aq.toFixed(1).replace('.', ',')} <small>из 5</small></span><span class="chip-s">${shown.length} ${plural(shown.length, ['ночь', 'ночи', 'ночей'])} за 2 недели</span></div>` : '';
   // chart: x = nights, y = clock time from 21:00 (top) to 12:00 (bottom)
@@ -2069,6 +2075,7 @@ function renderDiary() {
     const x = ml + i * cw, dt = new Date(d + 'T12:00'), e = diary.find(q => q.date === d), cls = i === 13 ? 'lbl today' : 'lbl';
     s += `<text class="${cls}" x="${x + cw / 2}" y="${H - 22}" text-anchor="middle">${wd[dt.getDay()]}</text><text class="${cls}" x="${x + cw / 2}" y="${H - 8}" text-anchor="middle">${dt.getDate()}</text>`;
     if (!e) return;
+    if (e.ns) { s += `<g class="bar" data-d="${d}"><rect class="ns" x="${x + cw * .2}" y="${Y(240)}" width="${cw * .6}" height="${Y(900) - Y(240)}" rx="${Math.min(8, cw * .3)}"><title>${dt.getDate()}.${pad(dt.getMonth() + 1)}: не спал</title></rect><text class="ns-t" x="${x + cw / 2}" y="${Y(570) + 4}" text-anchor="middle">0</text></g>`; return; }
     const b = rel(toMin(e.bed)), w = b + nightDur(e), top = Y(b), bh = Math.max(4, Y(w) - top);
     s += `<g class="bar${e.ex ? ' ex' : ''}" data-d="${d}"><rect class="q${e.q}" x="${x + cw * .2}" y="${top}" width="${cw * .6}" height="${bh}" rx="${Math.min(8, cw * .3)}"><title>${dt.getDate()}.${pad(dt.getMonth() + 1)}: ${e.bed} → ${e.wake}, ${dur(nightDur(e))}</title></rect>`
       + (bh > 34 ? `<text class="dur" x="${x + cw / 2}" y="${top + bh / 2 + 4}" text-anchor="middle">${(nightDur(e) / 60).toFixed(1).replace('.', ',')}</text>` : '') + '</g>';
@@ -2095,9 +2102,16 @@ $('#dCopy').addEventListener('click', async () => {
   const real = diary.filter(e => !e.ex);
   if (!real.length) { toast('В дневнике пока только примеры. Сохрани хотя бы одну свою ночь.'); return; }
   const wdn = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
-  const txt = 'Дневник сна\n' + real.map(e => { const d = new Date(e.date + 'T12:00'); return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${wdn[d.getDay()]}  ${e.bed} → ${e.wake}  ${dur(nightDur(e))}  оценка ${e.q}/5`; }).join('\n');
+  const txt = 'Дневник сна\n' + real.map(e => { const d = new Date(e.date + 'T12:00'); return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${wdn[d.getDay()]}  ` + (e.ns ? 'не спал' : `${e.bed} → ${e.wake}  ${dur(nightDur(e))}  оценка ${e.q}/5`); }).join('\n');
   try { await navigator.clipboard.writeText(txt); toast(`Скопировано: ${real.length} ${plural(real.length, ['ночь', 'ночи', 'ночей'])}. Можно вставить в заметки или сообщение.`); }
   catch (err) { toast('Браузер не дал доступ к буферу обмена. Попробуй ещё раз в обычном окне браузера.'); }
+});
+$('#dNoSleep').addEventListener('click', () => {
+  const date = $('#dDate').value; if (!date) return;
+  diary = diary.filter(x => !x.ex && x.date !== date); diary.push({ date, bed: '', wake: '', q: 1, ns: true });
+  diary.sort((a, b) => a.date < b.date ? -1 : 1); diary = diary.slice(-120); store.set('diary', diary);
+  fillForm(date); renderDiary();
+  toast('Записал: ночь без сна. Сегодня лучше лечь пораньше, а днём можно подремать 20 минут, не дольше.');
 });
 $('#dDel').addEventListener('click', () => { const d = $('#dDate').value; diary = diary.filter(x => x.date !== d); store.set('diary', diary); fillForm(d); renderDiary(); });
 
