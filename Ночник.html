@@ -82,6 +82,7 @@ button{cursor:pointer}
 html.gal-open{overflow:hidden}
 #galCv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
 #galCv:active{cursor:grabbing}
+#galLoc{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
 .gal-tags{position:absolute;inset:0;pointer-events:none}
 .gal-tag{position:absolute;left:0;top:0;margin:-9px 0 0 10px;border:0;background:none;padding:2px 4px;white-space:nowrap;cursor:pointer;
   font:500 10.5px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:rgba(214,220,250,.75);transition:opacity .4s,color .3s;opacity:0}
@@ -742,12 +743,14 @@ html.lamp-on .app,html.lamp-on #sky,html.lamp-on .grain,html.lamp-on .mini,html.
 
 <div class="galaxy" id="galaxy" hidden role="dialog" aria-label="Галактика — Млечный Путь снаружи">
   <canvas id="galCv" aria-hidden="true"></canvas>
+  <canvas id="galLoc" aria-hidden="true"></canvas>
   <div class="gal-tags" id="galTags"></div>
   <div class="gal-card" id="galCard" aria-live="polite"></div>
   <button type="button" class="gal-back" id="galBack">← Назад</button>
-  <div class="gal-hint">тяни — повернуть · колесо — ближе · двойной клик — вся галактика</div>
+  <div class="gal-hint">тяни — оглядеться · колесо, W A S D — лететь · Shift — быстрее · правая кнопка — облететь · двойной клик — вся галактика</div>
   <div class="gal-bar" id="galBar" role="toolbar" aria-label="Галактика">
     <button type="button" data-a="sun">Где мы</button>
+    <button type="button" data-a="sys">Солнечная система</button>
     <button type="button" data-a="core">Центр</button>
     <button type="button" data-a="top">Сверху</button>
     <button type="button" data-a="side">С ребра</button>
@@ -769,7 +772,7 @@ html.lamp-on .app,html.lamp-on #sky,html.lamp-on .grain,html.lamp-on .mini,html.
       <div class="lamp-batt" id="lampBatt"></div>
       <label class="check lamp-dawn"><input type="checkbox" id="lampCandle"> <span>мерцает как свеча · чуть больше расход</span></label>
       <label class="check lamp-dawn"><input type="checkbox" id="lampBreath"> <span>свет дышит: вдох 4 с, выдох 6 с</span></label>
-      <label class="check lamp-dawn"><input type="checkbox" id="napOn"> <span>заставка: домик, камин и закрытые глаза</span></label>
+      <label class="check lamp-dawn"><input type="checkbox" id="napOn"> <span>заставка: подходим к домику, экран гаснет</span></label>
       <label class="check lamp-dawn"><input type="checkbox" id="dawn"> <span id="dawnTxt">разбудить рассветом</span></label>
     </div>
   </div>
@@ -1653,12 +1656,16 @@ const sky = (() => {
     // a flock going home at dusk or out at dawn: a loose V, each bird with its own wingbeat, now and then a glide
     if (!reduce && bodies.sAlt > -7 && bodies.sAlt < 14 && wx.rain < .3 && t > nextBirds && !birds.length) {
       const dir = Math.random() < .5 ? -1 : 1, n = 6 + (Math.random() * 9 | 0), k = .7 + Math.random() * .8;      // k: how near the flock is
-      const y0 = H * (.18 + Math.random() * .28), sp = (32 + Math.random() * 14) * k, climb = (Math.random() - .5) * .12;
+      // the flock lives in the sky (azimuth / altitude, degrees), not on the screen: turn or zoom the view and it stays where it is
+      const D = Math.max(W, H * 1.15) / (2 * Math.tan(FOV0 / 2 * R)) * R;          // pixels per degree at the normal view
+      const hf = Math.atan(W / 2 / S) / R, vf = Math.atan(H / 2 / S) / R;
+      const alt0 = clamp(view.alt + (Math.random() * .6 - .05) * vf, 3, 40), sp = (32 + Math.random() * 14) * k / D, climb = (Math.random() - .5) * .12;
+      const az0 = view.az - dir * (hf + 3), rate = sp / Math.cos(alt0 * R), life = (2 * hf + 40) / rate;
       for (let i = 0; i < n; i++) {
-        const row = Math.ceil(i / 2), side2 = i % 2 ? 1 : -1, s = (24 + Math.random() * 7) * k;
-        birds.push({ x: (dir > 0 ? -60 : W + 60) - dir * (row * s * 1.5 + Math.random() * s * .6), y: y0 + side2 * row * s * .55 + (Math.random() - .5) * s * .5,
-          v: sp * dir * (.97 + Math.random() * .06), climb, s, dir, p: Math.random(), f: 2.6 + Math.random() * 1.1, glide: false, tm: .4 + Math.random() * 2,
-          e: 0, fold: 0, ph: Math.random() * 6, far: 1 - (k - .7) / .8 });
+        const row = Math.ceil(i / 2), side2 = i % 2 ? 1 : -1, s = (24 + Math.random() * 7) * k / D;
+        birds.push({ az: az0 - dir * (row * s * 1.5 + Math.random() * s * .6) / Math.cos(alt0 * R), alt: alt0 + side2 * row * s * .55 + (Math.random() - .5) * s * .5,
+          v: rate * dir * (.97 + Math.random() * .06), climb, s, dir, p: Math.random(), f: 2.6 + Math.random() * 1.1, glide: false, tm: .4 + Math.random() * 2,
+          e: 0, fold: 0, ph: Math.random() * 6, far: 1 - (k - .7) / .8, age: 0, life, D });
       }
       nextBirds = t + 45 + Math.random() * 75;
     }
@@ -1670,10 +1677,14 @@ const sky = (() => {
         if (!b.glide || b.e < .6) b.p = (b.p + dt * b.f) % 1;                                     // finish the beat before gliding
         const tp = birdPose(b.p, b.glide && b.e < .6 && b.e > -.2), sm = Math.min(1, dt * 22);
         b.e += (tp.e - b.e) * sm; b.fold += (tp.fold - b.fold) * sm;
-        b.x += b.v * dt; b.y += (b.v * b.climb * b.dir + Math.sin(t * .6 + b.ph) * 3 - (b.glide ? -2 : b.e * 4)) * dt;   // a downstroke lifts, a glide sinks a little
-        if (b.dir > 0 ? b.x > W + 120 : b.x < -120) { birds.splice(i, 1); continue; }
+        b.az += b.v * dt; b.alt -= (Math.abs(b.v) * b.climb + (Math.sin(t * .6 + b.ph) * 3 - (b.glide ? -2 : b.e * 4)) / b.D) * dt;   // a downstroke lifts, a glide sinks a little
+        if ((b.age += dt) > b.life) { birds.splice(i, 1); continue; }
+        const ca = Math.cos(b.alt * R), vx = Math.sin(b.az * R) * ca, vy = Math.cos(b.az * R) * ca, vz = Math.sin(b.alt * R);
+        const Zc = CAM[2][0] * vx + CAM[2][1] * vy + CAM[2][2] * vz; if (Zc < .2) continue;      // behind us: keep flying, just not drawn
+        const k = S / Zc, bx = cx + (CAM[0][0] * vx + CAM[0][1] * vy + CAM[0][2] * vz) * k + ox * .7, by = cy - (CAM[1][0] * vx + CAM[1][1] * vy + CAM[1][2] * vz) * k + oy * .7;
+        const bs = b.s * S * R / Zc; if (bx < -bs || bx > W + bs || by < -bs || by > H + bs) continue;
         x.fillStyle = rgb(mix(base, horizonCol, b.far * .35));                                    // farther birds a touch paler in the haze
-        drawBird(x, b.x + ox * .7, b.y + oy * .7, b.s, b, b.dir, Math.sin(t * .5 + b.ph) * .05);
+        drawBird(x, bx, by, bs, b, b.dir, Math.sin(t * .5 + b.ph) * .05);
       }
     }
     const ui = .55 + .45 * st.calm;      // behind the page the weather is quieter
@@ -1885,16 +1896,41 @@ function telSphere(size, L, alb, limb = .45) {     // a lit globe; L: light dire
 }
 const telNoise = (a, b, s) => Math.sin(a * 3.1 + s) * Math.sin(b * 4.7 + s * 1.7) * .5 + Math.sin(a * 7.3 + b * 2.9 + s * 2.3) * .3 + Math.sin(a * 13.1 - b * 11.7 + s) * .2;
 const TEL_ALB = {
-  jupiter: (la, lo) => {
-    const D = la * 57.3, w = telNoise(lo * 2, la * 9, 1) * 4;
-    let c = [228, 216, 192];
-    if (Math.abs(D - 13 - w * .4) < 5.5 || Math.abs(D + 14 - w * .4) < 6) c = [184, 140, 104];
-    else if (Math.abs(D) > 40) c = [190, 180, 168];
-    else if (Math.abs(D - 28) < 3 || Math.abs(D + 30) < 3) c = [204, 184, 156];
-    const gx = (lo - .5) / .28, gy = (D + 22) / 4.5;            // the Great Red Spot
-    if (gx * gx + gy * gy < 1) c = [204, 128, 96];
-    const n = 1 + telNoise(lo * 5, la * 20, 2) * .05; return c.map(v => v * n);
-  },
+  jupiter: (() => {
+    // the belts and zones by planetographic latitude (°), after Juno / Hubble colour images: cream zones, rust-brown belts, grey-blue poles
+    const P = [[-90, 112, 112, 118], [-62, 146, 140, 134], [-49, 168, 158, 144], [-43, 190, 177, 156], [-40, 158, 138, 116], [-37, 202, 188, 164], [-33, 176, 150, 118],
+      [-28.5, 180, 154, 122], [-26.5, 228, 214, 190], [-21, 232, 216, 192], [-19.5, 176, 120, 86], [-16, 204, 156, 116], [-11, 170, 112, 80], [-8, 206, 178, 142],
+      [-6.5, 236, 222, 198], [0, 241, 228, 204], [5, 232, 214, 186], [7, 156, 98, 70], [12, 174, 114, 80], [16.5, 188, 132, 96], [18.5, 228, 212, 186], [23, 232, 216, 192],
+      [25, 168, 132, 102], [28, 174, 142, 112], [30, 216, 200, 176], [34, 198, 180, 154], [36, 166, 146, 122], [39, 202, 186, 162], [48, 170, 160, 146], [62, 146, 140, 134], [90, 112, 112, 118]];
+    const band = D => { let i = 1; while (i < P.length - 1 && P[i][0] < D) i++; const a = P[i - 1], b = P[i], k = Math.max(0, Math.min(1, (D - a[0]) / (b[0] - a[0]))); return [a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k, a[3] + (b[3] - a[3]) * k]; };
+    const mixc = (c, d, k) => [c[0] + (d[0] - c[0]) * k, c[1] + (d[1] - c[1]) * k, c[2] + (d[2] - c[2]) * k];
+    const sm = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    const st = (lo, D, s) => Math.sin(lo * 2.1 + D * 1.9 + s) * .5 + Math.sin(lo * 5.3 - D * 3.7 + s * 2.1) * .3 + Math.sin(D * 7.9 + lo * 1.3 + s * 3.3) * .2;   // streaks: fine across latitude, long along it
+    return (la, lo) => {
+      const D0 = la * 57.3, wake = D0 < -9 && D0 > -21 && lo < .3 ? sm(.3, -.6, lo) : 0;          // the SEB west of the Red Spot is torn up
+      const D = D0 + Math.sin(lo * 6 + D0 * .5) * .7 + Math.sin(lo * 11 - D0 * .3 + 2) * .35 + st(lo, D0 * .35, 1) * 1.1 + st(lo * 2.7, D0 * .9, 4) * .45
+        + wake * (Math.sin(lo * 17 + D0 * 1.1) * 1.9 + Math.sin(lo * 29 - D0 * 1.7) * 1.1);     // band edges ripple with the wind
+      let c = band(D);
+      if (D0 > -1 && D0 < 8) {                                     // festoons: thin blue-grey plumes trailing from the north belt into the equator
+        const x = lo * 7 + (7 - D0) * .11 + 1.3, f = Math.pow(Math.max(0, Math.cos(x - Math.round(x / 6.2832) * 6.2832)), 26) * sm(-1, 4, D0) * sm(8, 5.5, D0);
+        c = mixc(c, [104, 104, 120], f * .65);
+      }
+      const gx = (lo - .55) / .25, gy = (D0 + 22.5) / 5.2, rr = gx * gx + gy * gy, ang = Math.atan2(gy, gx);   // the Great Red Spot in its pale hollow
+      if (rr < 2.2) {
+        const core = mixc([200, 116, 84], [222, 148, 110], (.5 + .5 * Math.sin(ang * 2 + rr * 4)) * .5 + rr * .4);            // a slow swirl inside
+        c = mixc(c, [234, 220, 198], sm(2.2, 1.3, rr) * .9);
+        c = mixc(c, core, sm(1.05, .7, rr));
+      }
+      for (const [ox, oy] of [[-.35, -40.5], [-.08, -40.7], [1.15, -40.2]]) {                  // white ovals with a faint dark rim
+        const wx = (lo - ox) / .06, wy = (D0 - oy) / 1.4, q = wx * wx + wy * wy;
+        if (q < 1.8) c = mixc(mixc(c, [150, 126, 100], sm(1.8, 1.25, q) * .4), [236, 230, 218], sm(1.05, .55, q));
+      }
+      const pole = sm(45, 70, Math.abs(D0));                                                   // the poles: grey-blue, mottled with storms
+      if (pole > 0) c = mixc(c, [128 + st(lo * 4, D0, 9) * 14, 128 + st(lo * 4, D0, 9) * 12, 138], pole * .6);
+      const n = 1 + st(lo * 3, D0 * 2.3, 2) * .045 + Math.sin(D * 4.3 + st(lo * 2, D0, 5) * 2) * .035;   // fine filaments along the bands
+      return [c[0] * n, c[1] * n, c[2] * n];
+    };
+  })(),
   saturn: la => { const D = la * 57.3; return Math.abs(D) > 55 ? [196, 186, 150] : Math.abs(D - 20) < 6 || Math.abs(D + 20) < 6 ? [208, 182, 128] : [230, 208, 160]; },
   mars: (la, lo) => { const D = la * 57.3; if (Math.abs(D) > 72) return [240, 238, 232]; const n = telNoise(lo * 2.3, la * 3.1, 5); return n > .15 ? [150, 82, 54] : [214, 120, 74]; },
   venus: (la, lo) => { const n = telNoise(lo, la * 2, 7) * .03; return [242 - n * 200, 234 - n * 200, 208]; },
@@ -2942,157 +2978,50 @@ function lampOff() {
   try { wl?.release(); } catch (e) {} wl = null;
 }
 let lampScroll = 0, lampHideT = 0;
-/* ============ the way into the night light: fly to the house, lie down by the fire, close the eyes ============ */
-// ~10 s, any click or key skips it. The fire, blurred by the closing eyes, becomes the orange circle of the night light
+/* ============ the way into the night light: walk up to the house, the screen goes out, the lamp warms up in the dark ============ */
+// ~6 s, any click or key skips it
 const nap = (() => {
   const box = $('#nap'), cv = $('#napCv'), q = cv.getContext('2d');
-  let W = 0, H = 0, dpr = 1, raf = 0, t0 = 0, done = null, shot = null, hx = 0, hy = 0, embers = [], finished = false, safety = 0;
+  let W = 0, H = 0, dpr = 1, raf = 0, t0 = 0, done = null, shot = null, hx = 0, hy = 0, finished = false, safety = 0;
   const ease = t => t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t);
   const seg = (t, a, b) => ease((t - a) / (b - a));
-  const nz = (t, s) => Math.sin(t * 7.3 + s) * .5 + Math.sin(t * 13.1 + s * 2.3) * .3 + Math.sin(t * 23.7 + s * 4.1) * .2;
-
-  /* ---- the room, drawn fresh each frame (it is only ten seconds) */
-  function room(t, light) {
-    const u = Math.min(W, H * 1.6) / 100, fx = W * .56, fy = H * .73, ow = u * 21, oh = u * 15;
-    const f = .82 + .18 * nz(t, 1);                                      // the fire breathes
-    // walls and floor, warm in the firelight
-    const wall = q.createRadialGradient(fx, fy - oh * .5, u * 4, fx, fy - oh * .5, Math.max(W, H) * .9);
-    wall.addColorStop(0, `rgb(${110 * f | 0},${58 * f | 0},${30 * f | 0})`); wall.addColorStop(.35, 'rgb(52,28,18)'); wall.addColorStop(1, 'rgb(14,9,8)');
-    q.fillStyle = wall; q.fillRect(-W, -H, W * 3, H * 3);
-    const fl = q.createLinearGradient(0, fy, 0, H * 1.2);
-    fl.addColorStop(0, 'rgb(40,22,14)'); fl.addColorStop(1, 'rgb(10,6,5)');
-    q.fillStyle = fl; q.fillRect(-W, fy, W * 3, H * 2);
-    // the window on the left: the same night outside, a thin Moon
-    const wx = W * .1, wy = H * .18, ww = u * 15, wh = u * 21;
-    const sk = q.createLinearGradient(0, wy, 0, wy + wh);
-    sk.addColorStop(0, '#060a1c'); sk.addColorStop(1, '#1a1838');
-    q.fillStyle = sk; q.fillRect(wx, wy, ww, wh);
-    for (let i = 0; i < 26; i++) { const sx = wx + ((i * 73) % 97) / 97 * ww, sy = wy + ((i * 41) % 89) / 89 * wh * .85, a = .3 + .5 * Math.max(0, Math.sin(t * 1.3 + i)); q.fillStyle = `rgba(230,234,255,${a})`; q.fillRect(sx, sy, 1.2, 1.2); }
-    q.fillStyle = 'rgba(240,232,210,.9)'; q.beginPath(); q.arc(wx + ww * .7, wy + wh * .25, u * 1.6, 0, 7); q.fill();
-    q.fillStyle = '#0a0e22'; q.beginPath(); q.arc(wx + ww * .7 + u * .7, wy + wh * .25 - u * .3, u * 1.5, 0, 7); q.fill();
-    q.strokeStyle = 'rgb(58,34,22)'; q.lineWidth = u * .9; q.strokeRect(wx, wy, ww, wh);
-    q.beginPath(); q.moveTo(wx + ww / 2, wy); q.lineTo(wx + ww / 2, wy + wh); q.moveTo(wx, wy + wh * .45); q.lineTo(wx + ww, wy + wh * .45); q.lineWidth = u * .6; q.stroke();
-    q.fillStyle = 'rgb(66,38,24)'; q.fillRect(wx - u, wy + wh, ww + u * 2, u * 1.2);
-    // the fireplace: stone, mantel, the dark mouth
-    const sx0 = fx - ow * .9, sy0 = fy - oh * 1.5;
-    q.fillStyle = `rgb(${86 * f | 0},${62 * f | 0},${50 * f | 0})`; q.fillRect(sx0, sy0, ow * 1.8, oh * 1.5);
-    q.strokeStyle = 'rgba(30,18,12,.5)'; q.lineWidth = 1;
-    for (let r = 0; r < 7; r++) for (let c = 0; c < 6; c++) { const bw = ow * 1.8 / 6, bh = oh * 1.5 / 7; q.strokeRect(sx0 + c * bw + (r % 2 ? bw / 2 : 0) - (r % 2 && c === 5 ? bw : 0), sy0 + r * bh, bw, bh); }
-    q.fillStyle = 'rgb(72,40,24)'; q.fillRect(sx0 - u * 2, sy0 - u * 2.2, ow * 1.8 + u * 4, u * 2.4);
-    q.fillStyle = 'rgb(12,7,5)'; q.beginPath(); q.moveTo(fx - ow / 2, fy); q.lineTo(fx - ow / 2, fy - oh * .7); q.quadraticCurveTo(fx, fy - oh * 1.15, fx + ow / 2, fy - oh * .7); q.lineTo(fx + ow / 2, fy); q.fill();
-    // things on the mantel: two candles and a little clock with the real time
-    [[-.7, 1], [.72, .8]].forEach(([dx, s], i) => {
-      const cx = fx + ow * dx, cy = sy0 - u * 2.2;
-      q.fillStyle = 'rgb(232,220,196)'; q.fillRect(cx - u * .45, cy - u * 3 * s, u * .9, u * 3 * s);
-      const fl2 = q.createRadialGradient(cx, cy - u * 3 * s - u * .6, 0, cx, cy - u * 3 * s - u * .6, u * 2.2);
-      fl2.addColorStop(0, `rgba(255,214,140,${.9 * (.85 + .15 * nz(t * 1.6, i + 4))})`); fl2.addColorStop(.25, 'rgba(255,160,70,.35)'); fl2.addColorStop(1, 'rgba(255,140,60,0)');
-      q.fillStyle = fl2; q.fillRect(cx - u * 2.2, cy - u * 3 * s - u * 2.8, u * 4.4, u * 4.4);
-    });
-    q.fillStyle = 'rgb(40,24,16)'; q.beginPath(); q.arc(fx, sy0 - u * 4.2, u * 1.9, 0, 7); q.fill();
-    q.fillStyle = 'rgb(236,222,196)'; q.beginPath(); q.arc(fx, sy0 - u * 4.2, u * 1.5, 0, 7); q.fill();
-    const d = new Date(), ha = (d.getHours() % 12 + d.getMinutes() / 60) / 12 * 6.2832, ma = d.getMinutes() / 60 * 6.2832;
-    q.strokeStyle = 'rgb(40,24,16)'; q.lineWidth = u * .22; q.beginPath();
-    q.moveTo(fx, sy0 - u * 4.2); q.lineTo(fx + Math.sin(ha) * u * .8, sy0 - u * 4.2 - Math.cos(ha) * u * .8);
-    q.moveTo(fx, sy0 - u * 4.2); q.lineTo(fx + Math.sin(ma) * u * 1.2, sy0 - u * 4.2 - Math.cos(ma) * u * 1.2); q.stroke();
-    // logs and the fire
-    q.fillStyle = 'rgb(54,30,18)';
-    q.save(); q.translate(fx, fy - u * 1.2); q.rotate(.12); q.fillRect(-ow * .36, -u * 1.1, ow * .72, u * 2.2); q.rotate(-.24); q.fillRect(-ow * .34, -u * 1.0, ow * .68, u * 2); q.restore();
-    q.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 7; i++) {
-      const bx = fx + (i - 3) * ow * .085 + nz(t * .7, i * 3) * u * .6, hh = oh * (.42 + .35 * (1 - Math.abs(i - 3) / 4)) * (.75 + .35 * (nz(t * 1.4, i) * .5 + .5)), bw = ow * .1;
-      const tipx = bx + nz(t * 1.9, i + 9) * u * 1.6, g = q.createLinearGradient(0, fy - u, 0, fy - u - hh);
-      g.addColorStop(0, 'rgba(255,236,170,.9)'); g.addColorStop(.3, 'rgba(255,170,60,.75)'); g.addColorStop(.7, 'rgba(230,80,30,.35)'); g.addColorStop(1, 'rgba(160,40,20,0)');
-      q.fillStyle = g; q.beginPath(); q.moveTo(bx - bw, fy - u); q.quadraticCurveTo(bx - bw * .9, fy - u - hh * .55, tipx, fy - u - hh); q.quadraticCurveTo(bx + bw * .9, fy - u - hh * .55, bx + bw, fy - u); q.fill();
-    }
-    const glow = q.createRadialGradient(fx, fy - oh * .3, 0, fx, fy - oh * .3, ow * 1.6);
-    glow.addColorStop(0, `rgba(255,150,60,${.45 * f})`); glow.addColorStop(1, 'rgba(255,120,40,0)');
-    q.fillStyle = glow; q.fillRect(fx - ow * 2, fy - oh * 2.2, ow * 4, oh * 3.2);
-    // embers drifting up the chimney
-    if (Math.random() < .5) embers.push({ x: fx + (Math.random() - .5) * ow * .5, y: fy - u * 2, v: u * (3 + Math.random() * 4), life: 0, ph: Math.random() * 6 });
-    embers = embers.filter(e => (e.life += 1 / 60) < 1.6);
-    embers.forEach(e => { const y = e.y - e.v * e.life * 3, x = e.x + Math.sin(e.life * 5 + e.ph) * u; if (y < fy - oh * 1.05) return; q.fillStyle = `rgba(255,${150 + Math.random() * 60 | 0},80,${1 - e.life / 1.6})`; q.fillRect(x, y, 1.6, 1.6); });
-    q.globalCompositeOperation = 'source-over';
-    // a rug, and the cat asleep on it, rimmed with firelight
-    const rg = q.createRadialGradient(fx, fy + u * 6, 0, fx, fy + u * 6, ow * 1.2);
-    rg.addColorStop(0, `rgba(150,52,40,${.55 * f})`); rg.addColorStop(1, 'rgba(90,30,24,0)');
-    q.fillStyle = rg; q.beginPath(); q.ellipse(fx, fy + u * 6, ow * 1.15, u * 5, 0, 0, 7); q.fill();
-    const kx = fx + ow * .55, ky = fy + u * 6.4, br = 1 + .02 * Math.sin(t * 1.6);         // the cat breathes
-    q.fillStyle = 'rgb(18,12,10)';
-    q.beginPath(); q.ellipse(kx, ky, u * 3.4 * br, u * 1.9 * br, 0, 0, 7); q.fill();
-    q.beginPath(); q.arc(kx - u * 3, ky - u * .6, u * 1.4, 0, 7); q.fill();
-    q.beginPath(); q.moveTo(kx - u * 4, ky - u * 1.4); q.lineTo(kx - u * 3.7, ky - u * 2.8); q.lineTo(kx - u * 3.1, ky - u * 1.8); q.fill();
-    q.beginPath(); q.moveTo(kx - u * 2.7, ky - u * 1.9); q.lineTo(kx - u * 2.1, ky - u * 3); q.lineTo(kx - u * 1.9, ky - u * 1.5); q.fill();
-    q.strokeStyle = 'rgb(18,12,10)'; q.lineWidth = u * .9; q.lineCap = 'round'; q.beginPath(); q.moveTo(kx + u * 3, ky + u * .4); q.quadraticCurveTo(kx + u * 4.6, ky + u * 2.2, kx + u * .6, ky + u * 2); q.stroke(); q.lineCap = 'butt';
-    q.strokeStyle = `rgba(255,150,70,${.5 * f})`; q.lineWidth = 1.4; q.beginPath(); q.ellipse(kx, ky, u * 3.4 * br, u * 1.9 * br, 0, Math.PI * 1.05, Math.PI * 1.75); q.stroke();
-    // the sofa we lie on: the blanket's edge across the bottom, a cushion at the left
-    const bl = q.createLinearGradient(0, H * .84, 0, H);
-    bl.addColorStop(0, `rgb(${120 * f | 0},${50 * f | 0},${36 * f | 0})`); bl.addColorStop(1, 'rgb(36,14,12)');
-    q.fillStyle = bl; q.beginPath(); q.moveTo(-W * .2, H * 1.2); q.lineTo(-W * .2, H * .9);
-    q.bezierCurveTo(W * .2, H * .82, W * .5, H * .9, W * .8, H * .87); q.bezierCurveTo(W * 1, H * .85, W * 1.2, H * .9, W * 1.3, H * .92); q.lineTo(W * 1.3, H * 1.2); q.fill();
-    q.strokeStyle = 'rgba(230,190,140,.07)'; q.lineWidth = u * .9;
-    for (let i = 0; i < 9; i++) { const x0 = W * (i * .14 - .1); q.beginPath(); q.moveTo(x0, H * 1.1); q.quadraticCurveTo(x0 + u * 2, H * .95, x0 + u * 5, H * .86); q.stroke(); }
-    const ar = q.createRadialGradient(W * .02, H * .86, 0, W * .02, H * .86, W * .18);              // the sofa's armrest under our head
-    ar.addColorStop(0, `rgb(${70 * f | 0},${34 * f | 0},${26 * f | 0})`); ar.addColorStop(1, 'rgb(28,14,12)');
-    q.fillStyle = ar; q.beginPath(); q.ellipse(W * .02, H * .9, W * .16, H * .2, -.25, 0, 7); q.fill();
-    // the whole room a touch darker at first: we come in from the night
-    if (light < 1) { q.fillStyle = `rgba(0,0,0,${1 - light})`; q.fillRect(-W, -H, W * 3, H * 3); }
-    return [fx, fy - oh * .35, u];
-  }
 
   function frame(now) {
     raf = requestAnimationFrame(frame);
     const t = (now - t0) / 1000;
     q.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (t < 3) {
-      // 1. fly to the house: the night we were looking at grows toward its warm window
-      const k = Math.pow(seg(t, 0, 2.9), 2.2), z = 1 + k * 26;
+    if (t < 3.8) {
+      // 1. we walk up to the house: the night we were looking at drifts toward its warm window, and the screen slowly goes out
+      const k = seg(t, 0, 3.6), z = 1 + Math.pow(k, 1.7) * 4.2, dark = seg(t, 1.6, 3.7);
+      const px = W / 2 + (hx - W / 2) * (1 - k * .8), py = H * .55 + (hy - H * .55) * (1 - k * .8);   // the window comes toward the middle
       q.fillStyle = '#000'; q.fillRect(0, 0, W, H);
-      q.save(); q.translate(W / 2 + (hx - W / 2) * (1 - k), H / 2 + (hy - H / 2) * (1 - k)); q.scale(z, z); q.translate(-hx, -hy);
+      q.save(); q.translate(px, py); q.scale(z, z); q.translate(-hx, -hy);
       if (shot) q.drawImage(shot, 0, 0, W, H);
       q.restore();
-      const wg = q.createRadialGradient(W / 2 + (hx - W / 2) * (1 - k), H / 2 + (hy - H / 2) * (1 - k), 0, W / 2, H / 2, Math.max(W, H) * (.05 + k * .9));
-      wg.addColorStop(0, `rgba(255,190,120,${.2 + k * .8})`); wg.addColorStop(1, 'rgba(255,170,100,0)');
+      const wr = Math.min(W, H) * (.03 + k * .1), wg = q.createRadialGradient(px, py, 0, px, py, wr * 3);
+      wg.addColorStop(0, `rgba(255,190,120,${.35 + k * .3})`); wg.addColorStop(1, 'rgba(255,170,100,0)');
       q.fillStyle = wg; q.fillRect(0, 0, W, H);
-      if (t > 2.4) { q.fillStyle = `rgba(255,200,140,${seg(t, 2.4, 3)})`; q.fillRect(0, 0, W, H); }
+      q.fillStyle = `rgba(0,0,0,${dark})`; q.fillRect(0, 0, W, H);
+      cv.style.filter = `blur(${(dark * 6 * dpr).toFixed(1)}px)`;
       return;
     }
-    // 2. inside: the warm flash fades, we lie down (the view lowers and tilts), 3. the eyes close
-    const lie = seg(t, 4.1, 5.6), push = seg(t, 3, 9);
-    q.save();
-    q.translate(W / 2, H / 2); q.rotate(-.13 * lie); q.scale(1.04 + push * .12, 1.04 + push * .12); q.translate(-W / 2, -H / 2 - lie * H * .04);
-    const [fx, fy, u] = room(t, .55 + .45 * seg(t, 3, 3.8));
-    q.restore();
-    if (t < 3.9) { q.fillStyle = `rgba(255,200,140,${1 - seg(t, 3, 3.9)})`; q.fillRect(0, 0, W, H); }
-    // eyelids: a slow blink, then they close for good; the room melts into soft focus
-    const lid = t < 6.6 ? seg(t, 5.7, 6.25) * .32 * (1 - seg(t, 6.25, 6.6)) : seg(t, 6.6, 8.4);
-    cv.style.filter = `blur(${(seg(t, 5.8, 8.6) * 14 * dpr).toFixed(1)}px)`;
-    if (lid > 0) {
-      const hTop = H * .5 * lid;
-      [[0, hTop, 1], [H, H - hTop, -1]].forEach(([y0, y1, s]) => {
-        const g = q.createLinearGradient(0, y1 - s * 60, 0, y1 + s * 30);
-        g.addColorStop(0, '#000'); g.addColorStop(1, 'rgba(0,0,0,0)');
-        q.fillStyle = '#000'; q.fillRect(0, Math.min(y0, y1 - s * 60), W, Math.abs(y1 - s * 60 - y0));
-        q.fillStyle = g; q.fillRect(0, Math.min(y1 - s * 60, y1 + s * 30), W, 90);
-      });
-    }
-    // 4. behind closed eyes only the fire stays: an orange circle that drifts to the night light's place and opens into it
-    if (t > 8) {
-      const k = seg(t, 8, 9.8), cx = fx + (W * .5 - fx) * k, cy = fy + (H * .62 - fy) * k, rr = u * 9 + k * Math.max(W, H) * .62;
-      const gv = +($('#glow').value || .32), bk = seg(t, 8, 8.5);
-      q.fillStyle = `rgba(5,3,2,${bk})`; q.fillRect(0, 0, W, H);
-      const g = q.createRadialGradient(cx, cy, 0, cx, cy, rr);
-      g.addColorStop(0, `rgba(255,150,70,${(.5 * (1 - k) + gv * k) * bk})`); g.addColorStop(.4, `rgba(120,50,20,${(.25 * (1 - k) + gv * .5 * k) * bk})`); g.addColorStop(.78, 'rgba(5,3,2,0)');
-      q.fillStyle = g; q.fillRect(0, 0, W, H);
-      cv.style.filter = `blur(${((1 - k) * 14 * dpr).toFixed(1)}px)`;
-    }
-    if (t > 9.6) finish();
+    // 2. darkness, and in it the night light warms up: an orange circle that grows into the lamp
+    const k = seg(t, 4.1, 6.3), gv = +($('#glow').value || .32), u = Math.min(W, H);
+    const cx = W * .5, cy = H * .62, rr = u * .05 + k * Math.max(W, H) * .62, a = seg(t, 3.9, 4.8);
+    q.fillStyle = 'rgb(5,3,2)'; q.fillRect(0, 0, W, H);
+    const g = q.createRadialGradient(cx, cy, 0, cx, cy, rr);
+    g.addColorStop(0, `rgba(255,150,70,${(.55 * (1 - k) + gv * k) * a})`); g.addColorStop(.4, `rgba(120,50,20,${(.25 * (1 - k) + gv * .5 * k) * a})`); g.addColorStop(.78, 'rgba(5,3,2,0)');
+    q.fillStyle = g; q.fillRect(0, 0, W, H);
+    cv.style.filter = `blur(${((1 - k) * 8 * dpr).toFixed(1)}px)`;
+    if (t > 6.4) finish();
   }
 
   function finish() {
     if (finished) return; finished = true; clearTimeout(safety);
     cancelAnimationFrame(raf); raf = 0;
     const cb = done; done = null; cb && cb();
-    box.classList.add('out'); setTimeout(() => { box.hidden = true; box.classList.remove('out'); cv.style.filter = ''; }, 1300);
+    // the night light fades in underneath first; only then does the intro let go, so the page never shows between them
+    setTimeout(() => { box.classList.add('out'); setTimeout(() => { box.hidden = true; box.classList.remove('out'); cv.style.filter = ''; }, 1300); }, 1400);
   }
   async function play(cb) {
     if (reduce || !store.get('napIntro', true) || !box.hidden) return cb();
@@ -3102,8 +3031,8 @@ const nap = (() => {
     W = innerWidth; H = innerHeight; dpr = Math.min(1.5, devicePixelRatio || 1);
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     shot = $('#sky'); hx = h[0] + 4; hy = h[1] - 8;                          // the lit window
-    done = cb; finished = false; embers = []; box.hidden = false; t0 = performance.now(); raf = requestAnimationFrame(frame);
-    clearTimeout(safety); safety = setTimeout(finish, 10500);            // a hidden tab gets no frames: the night light still comes
+    done = cb; finished = false; box.hidden = false; t0 = performance.now(); raf = requestAnimationFrame(frame);
+    clearTimeout(safety); safety = setTimeout(finish, 7500);             // a hidden tab gets no frames: the night light still comes
   }
   box.addEventListener('click', finish);
   addEventListener('keydown', e => { if (!box.hidden && !finished) { e.stopImmediatePropagation(); finish(); } }, true);
@@ -3143,7 +3072,8 @@ if (/[?&]exe\b/.test(location.search)) {
 const galaxy = (() => {
   const box = $('#galaxy'), cv = $('#galCv'), card = $('#galCard'), tags = $('#galTags');
   let gl = null, P1 = null, nStars = 0, nDust = 0, bStars = null, bDust = null, raf = 0, last = 0, built = false;
-  const cam = { yaw: 2.2, pitch: .62, dist: 900, tx: 0, ty: 0, tz: 0, to: null, idle: 0 };
+  const cam = { e: [0, 0, 900], yaw: 2.2, pitch: .62, to: null, idle: 0 };
+  let loc = null, EG = [0, 0, 900], CAND = null;     // loc: inside a star system; CAND: every star point one can visit
   let spin = 0, spinRate = 1, drag = null, W = 0, H = 0, dpr = 1, sel = 'mw';
   const TANP = Math.tan(13 * Math.PI / 180), R0 = 12, SUN_R = 26.7;
   // arms start at the bar's ends; offsets put the Perseus arm just outside the Sun and the Sagittarius arm just inside
@@ -3242,16 +3172,19 @@ const galaxy = (() => {
       const t = rnd() * 6.2832, p = Math.acos(2 * rnd() - 1), r = 3000 + rnd() * 2000, b = rnd();
       put(b < .7 ? pal.white : b < .9 ? pal.young : pal.warm, r * Math.sin(p) * Math.cos(t), r * Math.cos(p), r * Math.sin(p) * Math.sin(t), .3 + rnd() * .5, 6 + rnd() * 10);
     }
+    const C = [];
+    for (let o = 0; o < S.length; o += 8) if (S[o + 7] < .5 && S[o + 6] > .3 && Math.abs(S[o]) < 1000) C.push(S[o], S[o + 1], S[o + 2], S[o + 3], S[o + 4], S[o + 5]);
+    CAND = new Float32Array(C);
     nStars = S.length / 8; nDust = D.length / 8;
     return [new Float32Array(S), new Float32Array(D)];
   }
 
   const VS = `attribute vec3 p; attribute vec4 c; attribute float s;
-uniform mat4 mvp; uniform float spin, px, dpr, far;
+uniform mat4 mvp; uniform float spin, px, dpr, far; uniform vec3 eye, hide;
 varying vec4 vc;
 void main(){
   float r = length(p.xz), a = r < 70.0 ? spin : 0.0, ca = cos(a), sa = sin(a);
-  vec4 cp = mvp * vec4(p.x * ca - p.z * sa, p.y, p.x * sa + p.z * ca, 1.0);
+  vec4 cp = mvp * vec4(vec3(p.x * ca - p.z * sa, p.y, p.x * sa + p.z * ca) - eye, 1.0);   // relative to the eye: steady even a few AU from a star
   gl_Position = cp;
   float k = s * px / max(cp.w, .01);
   bool gas = s > .5;
@@ -3259,7 +3192,7 @@ void main(){
   gl_PointSize = sz;
   float keep = min(1.0, (k * k) / (sz * sz) * 1.8 + .12);     // tiny points keep their light, not their size
   if (gas) keep *= clamp(40.0 * dpr / k, .08, 1.0);
-  vc = vec4(c.rgb, c.a * keep * (cp.w > far ? 0.0 : 1.0));
+  vc = vec4(c.rgb, c.a * keep * (cp.w > far || distance(p, hide) < 1e-6 ? 0.0 : 1.0));   // the star we are visiting is drawn by its system
 }`;
   const FS = `precision mediump float; varying vec4 vc; uniform float dust;
 void main(){
@@ -3275,7 +3208,7 @@ void main(){
     P1 = gl.createProgram(); gl.attachShader(P1, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(P1, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(P1);
     if (!gl.getProgramParameter(P1, gl.LINK_STATUS)) return false;
     gl.useProgram(P1);
-    ['mvp', 'spin', 'px', 'dpr', 'far', 'dust'].forEach(n => U[n] = gl.getUniformLocation(P1, n));
+    ['mvp', 'spin', 'px', 'dpr', 'far', 'dust', 'eye', 'hide'].forEach(n => U[n] = gl.getUniformLocation(P1, n));
     const [s, d] = build();
     bStars = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bStars); gl.bufferData(gl.ARRAY_BUFFER, s, gl.STATIC_DRAW);
     bDust = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bDust); gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
@@ -3289,24 +3222,366 @@ void main(){
     gl.enableVertexAttribArray(at('s')); gl.vertexAttribPointer(at('s'), 1, gl.FLOAT, false, 32, 28);
   }
 
-  /* ---- camera */
-  const eye = () => { const cp = Math.cos(cam.pitch); return [cam.tx + cam.dist * cp * Math.sin(cam.yaw), cam.ty + cam.dist * Math.sin(cam.pitch), cam.tz + cam.dist * cp * Math.cos(cam.yaw)]; };
-  function matrix() {
-    const e = eye(), f = norm3([cam.tx - e[0], cam.ty - e[1], cam.tz - e[2]]), s = norm3(cross(f, [0, 1, 0])), u = cross(s, f);
-    const fov = 50 * Math.PI / 180, a = W / H, n = .3, fr = 30000, t = 1 / Math.tan(fov / 2);
-    const V = [s[0], u[0], -f[0], 0, s[1], u[1], -f[1], 0, s[2], u[2], -f[2], 0, -dot3(s, e), -dot3(u, e), dot3(f, e), 1];
+  /* ---- vectors */
+  const norm3 = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const sc3 = (a, k) => [a[0] * k, a[1] * k, a[2] * k], len3 = a => Math.hypot(a[0], a[1], a[2]);
+  const rotY = (p, a) => { const c = Math.cos(a), s = Math.sin(a); return [p[0] * c - p[2] * s, p[1], p[0] * s + p[2] * c]; };
+  const spun = p => Math.hypot(p[0], p[2]) < 70 ? rotY(p, spin) : p;
+
+  /* ---- the camera flies freely: an eye and where it looks. In kly among the stars; next to a star, in AU inside its own system */
+  const dirv = (yaw, pitch) => { const cp = Math.cos(pitch); return [cp * Math.sin(yaw), Math.sin(pitch), cp * Math.cos(yaw)]; };   // pointing back at the eye
+  function basis() { const f = sc3(dirv(cam.yaw, cam.pitch), -1), s = norm3(cross(f, [0, 1, 0])); return [s, cross(s, f), f]; }
+  const eyeL = () => loc ? loc.p : cam.e;
+  function moveL(d) { const e = eyeL(); e[0] += d[0]; e[1] += d[1]; e[2] += d[2]; }
+  function lookAt(d, k) {
+    const n = norm3(d), y = Math.atan2(-n[0], -n[2]), p = Math.asin(Math.max(-1, Math.min(1, -n[1])));
+    let dy = y - cam.yaw; dy -= Math.round(dy / 6.2832) * 6.2832; cam.yaw += dy * k; cam.pitch += (p - cam.pitch) * k;
+  }
+  const clampP = p => Math.max(-1.55, Math.min(1.55, p));
+  function matrix([s, u, f]) {                   // rotation only: the shader takes the eye off first, so nothing shakes up close
+    const fov = 50 * Math.PI / 180, a = W / H, n = 1e-5, fr = 30000, t = 1 / Math.tan(fov / 2);
+    const V = [s[0], u[0], -f[0], 0, s[1], u[1], -f[1], 0, s[2], u[2], -f[2], 0, 0, 0, 0, 1];
     const Pm = [t / a, 0, 0, 0, 0, t, 0, 0, 0, 0, (fr + n) / (n - fr), -1, 0, 0, 2 * fr * n / (n - fr), 0];
     const M = new Float32Array(16);
     for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let v = 0; for (let k = 0; k < 4; k++) v += Pm[k * 4 + j] * V[i * 4 + k]; M[i * 4 + j] = v; }
     return M;
   }
-  const norm3 = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
-  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-  const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const spun = p => { const r = Math.hypot(p[0], p[2]), a = r < 70 ? spin : 0, c = Math.cos(a), s = Math.sin(a); return [p[0] * c - p[2] * s, p[1], p[0] * s + p[2] * c]; };
-  function screen(M, p) {
-    const x = M[0] * p[0] + M[4] * p[1] + M[8] * p[2] + M[12], y = M[1] * p[0] + M[5] * p[1] + M[9] * p[2] + M[13], w = M[3] * p[0] + M[7] * p[1] + M[11] * p[2] + M[15];
+  function screen(M, p0) {
+    const p = sub3(p0, EG), x = M[0] * p[0] + M[4] * p[1] + M[8] * p[2], y = M[1] * p[0] + M[5] * p[1] + M[9] * p[2], w = M[3] * p[0] + M[7] * p[1] + M[11] * p[2];
     return w > .3 ? [(x / w * .5 + .5) * W, (.5 - y / w * .5) * H, w] : null;
+  }
+
+  /* ---- star systems. The Sun's is real: the planets where they are today, the big moons, rings, the belts, the junk around the Earth.
+     Any other star point gets a system made up by the rules: hot stars are big and bright, rocky planets close in, giants past the snow line */
+  const AUK = 6.3241e7, SYS_R = .002, KM = 1 / 1.496e8, DAY0 = Date.UTC(2000, 0, 1, 12), TS = 300;   // AU per kly; systems open inside 0.002 kly; time ×300
+  const gdir = (l, b) => { l *= Math.PI / 180; b *= Math.PI / 180; return [Math.cos(b) * Math.cos(l), Math.sin(b), Math.cos(b) * Math.sin(l)]; };
+  const ncross = (a, b) => sc3(cross(a, b), -1);              // our axes are left-handed (y = galactic north), so the true cross product flips
+  const EX = gdir(96.34, -60.19), EN = gdir(96.38, 29.81), ECL = [EX, ncross(EN, EX)];   // the ecliptic: tilted ~60° to the Milky Way
+  const QZ = gdir(122.93, 27.13), EQU = [EX, ncross(QZ, EX)];                           // the Earth's equator
+  const plane = n => { const x = norm3(ncross(n, Math.abs(n[1]) < .9 ? [0, 1, 0] : [1, 0, 0])); return [x, ncross(n, x)]; };
+  const eclPole = (lam, bet) => { lam *= Math.PI / 180; bet *= Math.PI / 180; const c = Math.cos(bet); return norm3(add3(add3(sc3(ECL[0], c * Math.cos(lam)), sc3(ECL[1], c * Math.sin(lam))), sc3(EN, Math.sin(bet)))); };
+  // smooth noise on the sphere itself: a sum of waves in random 3-D directions, so nothing repeats like wallpaper
+  // fractal noise on the sphere itself (waves in random 3-D directions, octave on octave), so nothing repeats like wallpaper
+  const WAVES = (() => { let sd = 99; const r = () => (sd = sd * 16807 % 2147483647) / 2147483647; return Array.from({ length: 24 }, () => norm3([r() - .5, r() - .5, r() - .5]).concat(r() * 6.2832)); })();
+  function noise3(la, lo, s = 0, oct = 7, f0 = 1.7) {
+    const c = Math.cos(la), P = [c * Math.sin(lo), Math.sin(la), c * Math.cos(lo)], x = P[s % 3], y = P[(s + 1) % 3], z = P[(s + 2) % 3];
+    let v = 0, f = f0, a = 1, n = 0;
+    for (let o = 0; o < oct; o++, f *= 2.03, a *= .52) {
+      for (let t = 0; t < 3; t++) { const w = WAVES[(o * 3 + t + s * 5) % 24]; v += Math.sin((w[0] * x + w[1] * y + w[2] * z) * f + w[3] + s * 1.7) * a; }
+      n += 1.5 * a * a;
+    }
+    return v / Math.sqrt(n) * .5;                                   // about ±0.5 typical
+  }
+  const rockAlb = (c, s) => (la, lo) => { const n = 1 + noise3(la, lo, s % 7) * .2; return [c[0] * n, c[1] * n, c[2] * n]; };
+  const gasAlb = (c1, c2, s) => (la, lo) => { const D = la * 57.3 + telNoise(lo * 3, la * 6, s) * 3, k = .5 + .5 * Math.sin(D * .32 + s); return [c1[0] + (c2[0] - c1[0]) * k, c1[1] + (c2[1] - c1[1]) * k, c1[2] + (c2[2] - c1[2]) * k]; };
+  const ALB = {
+    mercury: TEL_ALB.mercury, venus: TEL_ALB.venus, mars: TEL_ALB.mars, jupiter: TEL_ALB.jupiter, saturn: TEL_ALB.saturn,
+    earth: (la, lo) => {      // oceans, green and desert land, ice at the poles, and swirls of cloud over it all
+      const D = Math.abs(la * 57.3), land = noise3(la, lo, 1, 7) + .05, dry = noise3(la, lo, 3, 4), lerp = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+      let c = land > .2 ? lerp([70, 104, 52], [196, 172, 122], Math.max(0, Math.min(1, (dry + .2 - Math.abs(D - 24) / 40) * 2))) : lerp([22, 58, 120], [36, 86, 150], Math.max(0, (land + .25) * 2.6));
+      if (land > .2 && land < .24) c = lerp(c, [120, 140, 100], .4);
+      if (D > 68 + noise3(la, lo, 4, 5) * 10) c = [232, 238, 244];
+      const cl = noise3(la + noise3(la, lo, 5, 3) * .35, lo + noise3(la, lo, 7, 3) * .5, 6, 6, 3.6) + .1 * Math.cos(la * 6) - .12 * Math.exp(-Math.pow((D - 24) / 8, 2));   // swirled; more at the equator, less over the desert belts
+      return cl > .26 ? lerp(c, [246, 248, 252], Math.min(.9, (cl - .26) * 2.4)) : c;
+    },
+    moon: (la, lo) => { const n = noise3(la, lo, 2, 5, 2.2), m = 1 + noise3(la, lo, 5, 6, 5) * .12, k = Math.max(0, Math.min(1, (n - .38) * 5)); return [(178 - 76 * k) * m, (174 - 74 * k) * m, (166 - 70 * k) * m]; },
+    uranus: la => [168 + Math.abs(la) * 14, 214, 224],
+    neptune: (la, lo) => { const n = telNoise(lo * 3, la * 6, 4); return [70 + n * 24, 108 + n * 24, 204]; },
+    titan: gasAlb([214, 168, 86], [196, 146, 70], 2), io: rockAlb([226, 200, 110], 5), europa: rockAlb([222, 208, 186], 6)
+  };
+  const SUNINFO = 'Размеры и расстояния настоящие, поэтому планеты — точки, а орбиты нарисованы линиями. Плоскость планет наклонена к диску Галактики на 60°. Нажми на имя — подлетим. Время здесь идёт в 300 раз быстрее.';
+  const FACTS = {
+    sun: 'Обычная жёлтая звезда, в 109 раз шире Земли. Её свет идёт до нас 8 минут 20 секунд.',
+    mercury: 'Ближе всех к Солнцу: днём +430 °C, ночью −180 °C. Год — 88 земных суток.',
+    venus: 'Под облаками из серной кислоты +465 °C — горячее Меркурия из-за парникового эффекта. Сутки здесь длиннее года.',
+    earth: 'Наш дом. Вокруг — мусор: отслеживают больше 30 тысяч обломков крупнее 10 см — мёртвые спутники, ступени ракет, осколки. Точки здесь — модель этих поясов: низкие орбиты, навигация и кольцо геостационарных спутников.',
+    moon: 'В 384 тысячах км. Всегда повёрнута к Земле одной стороной.',
+    mars: 'Красный от ржавчины. Два спутника — Фобос и Деймос, похожие на картофелины.',
+    jupiter: 'Больше всех остальных планет вместе взятых. Большое красное пятно — буря шире Земли, ей больше 350 лет.',
+    io: 'Самое вулканическое место Солнечной системы.', europa: 'Подо льдом — солёный океан, где может быть жизнь.',
+    saturn: 'Кольца из льда и камней шириной 280 тысяч км, а толщиной — около 10 метров.',
+    titan: 'Единственный спутник с плотной атмосферой: там идут дожди из метана.',
+    uranus: 'Лежит на боку: ось наклонена на 98°, и спутники кружат почти «сверху вниз».',
+    neptune: 'Ветер до 2000 км/ч — самый сильный в Солнечной системе. Тритон кружит в обратную сторону.',
+    pluto: 'Карликовая планета в поясе Койпера. Харон так велик, что они кружат вокруг общей точки.',
+    ceres: 'Самое большое тело пояса астероидов, 940 км.',
+    iss: 'Международная космическая станция: 109 м в размахе, 420 км над Землёй, круг за 92 минуты.',
+    hubble: 'Телескоп «Хаббл», 13 м, на орбите с 1990 года.', tiangong: 'Китайская станция «Тяньгун», 390 км над Землёй.'
+  };
+  function orbitPos(b, days) {
+    const th = (b.L0 + 360 * days / b.P) * Math.PI / 180, [X, Y] = b.pl, c = Math.cos(th) * b.a, s = Math.sin(th) * b.a, p = b.parent.pos;
+    b.pos = [p[0] + X[0] * c + Y[0] * s, p[1] + X[1] * c + Y[1] * s, p[2] + X[2] * c + Y[2] * s];
+  }
+  // a swarm of small things on circular orbits: belts of rock, or junk around a planet. Each with its own plane, radius and phase
+  function swarm(parent, n, gen) {
+    const A = new Float64Array(n), T0 = new Float64Array(n), P = new Float64Array(n), X = new Float64Array(n * 3), Y = new Float64Array(n * 3), R = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const o = gen(i); A[i] = o.a; T0[i] = o.t0; P[i] = o.P; R[i] = o.r; X.set(o.pl[0], i * 3); Y.set(o.pl[1], i * 3); }
+    return { parent, n, A, T0, P, X, Y, R, pos: new Float64Array(n * 3), col: parent.kind === 'star' ? [150, 140, 128] : [206, 210, 220] };
+  }
+  const tilted = (base, inc, node) => {      // a plane tilted by inc around a line at angle node in the base plane
+    const [X, Y] = base, n = ncross(X, Y), cn = Math.cos(node), sn = Math.sin(node), ci = Math.cos(inc), si = Math.sin(inc);
+    const L = add3(sc3(X, cn), sc3(Y, sn)), M = add3(sc3(X, -sn), sc3(Y, cn));
+    return [L, add3(sc3(M, ci), sc3(n, si))];
+  };
+  function finishSys(sys) {
+    sys.update = days => {
+      for (const b of sys.bodies) if (b.parent) orbitPos(b, days);
+      for (const w of sys.swarms) {
+        const p = w.parent.pos;
+        for (let i = 0, o = 0; i < w.n; i++, o += 3) {
+          const th = w.T0[i] + 6.2832 * days / w.P[i], c = Math.cos(th) * w.A[i], s = Math.sin(th) * w.A[i];
+          w.pos[o] = p[0] + w.X[o] * c + w.Y[o] * s; w.pos[o + 1] = p[1] + w.X[o + 1] * c + w.Y[o + 1] * s; w.pos[o + 2] = p[2] + w.X[o + 2] * c + w.Y[o + 2] * s;
+        }
+      }
+    };
+    return sys;
+  }
+  function sunSys() {
+    let seed = 7; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647, gauss = () => (rnd() + rnd() + rnd() - 1.5) * 1.4;
+    const Yr = 365.256, bodies = [], add = o => { o.pos = [0, 0, 0]; o.r *= KM; o.alb = o.alb || ALB[o.id] || rockAlb(o.col, bodies.length); o.info = FACTS[o.id]; bodies.push(o); return o; };
+    const sun = add({ id: 'sun', name: 'Солнце', r: 696000, col: [255, 236, 210], kind: 'star' });
+    const P = {};
+    [['mercury', 'Меркурий', .387, .2408, 252.25, 2440, [176, 166, 156]], ['venus', 'Венера', .723, .6152, 181.98, 6052, [242, 232, 206]],
+     ['earth', 'Земля', 1, 1, 100.46, 6371, [70, 110, 170]], ['mars', 'Марс', 1.524, 1.881, 355.45, 3390, [214, 120, 74]],
+     ['jupiter', 'Юпитер', 5.203, 11.86, 34.4, 69911, [220, 200, 170]], ['saturn', 'Сатурн', 9.537, 29.46, 49.94, 58232, [230, 208, 160]],
+     ['uranus', 'Уран', 19.19, 84.01, 313.23, 25362, [170, 214, 222]], ['neptune', 'Нептун', 30.07, 164.8, 304.88, 24622, [90, 130, 210]],
+     ['pluto', 'Плутон', 39.48, 248, 238.93, 1188, [214, 196, 170]], ['ceres', 'Церера', 2.77, 4.6, 153, 470, [150, 145, 140]]
+    ].forEach(([id, name, a, py, L0, r, col]) => P[id] = add({ id, name, r, col, parent: sun, a, P: py * Yr, L0, pl: id === 'pluto' ? tilted(ECL, .3, 1.9) : ECL, kind: id === 'pluto' || id === 'ceres' ? 'dwarf' : 'planet' }));
+    P.saturn.ring = [[1.24, 1.95, .62], [2.03, 2.27, .42]]; P.saturn.ringPl = plane(eclPole(79.5, 61.9));
+    const satPl = plane(eclPole(79.5, 61.9)), uraPl = plane(eclPole(258, -8)), tri = tilted(ECL, 2.7, .6);
+    [['earth', 'moon', 'Луна', 384400, 27.32, 1737, [190, 186, 178], ECL], ['mars', 'phobos', 'Фобос', 9376, .319, 11, [120, 108, 98], ECL], ['mars', 'deimos', 'Деймос', 23463, 1.263, 6, [140, 126, 112], ECL],
+     ['jupiter', 'io', 'Ио', 421700, 1.769, 1822, 0, ECL], ['jupiter', 'europa', 'Европа', 671034, 3.551, 1561, 0, ECL], ['jupiter', 'ganymede', 'Ганимед', 1070412, 7.155, 2634, [168, 158, 146], ECL], ['jupiter', 'callisto', 'Каллисто', 1882709, 16.69, 2410, [112, 102, 92], ECL],
+     ['saturn', 'mimas', 'Мимас', 185539, .942, 198, [200, 200, 200], satPl], ['saturn', 'enceladus', 'Энцелад', 237948, 1.37, 252, [244, 246, 250], satPl], ['saturn', 'tethys', 'Тефия', 294619, 1.888, 531, [220, 220, 216], satPl],
+     ['saturn', 'dione', 'Диона', 377396, 2.737, 561, [210, 208, 204], satPl], ['saturn', 'rhea', 'Рея', 527108, 4.518, 764, [200, 196, 190], satPl], ['saturn', 'titan', 'Титан', 1221870, 15.95, 2575, 0, satPl], ['saturn', 'iapetus', 'Япет', 3560820, 79.32, 734, [150, 130, 110], tilted(satPl, .27, 1)],
+     ['uranus', 'miranda', 'Миранда', 129390, 1.413, 236, [180, 180, 180], uraPl], ['uranus', 'ariel', 'Ариэль', 191020, 2.52, 579, [190, 188, 184], uraPl], ['uranus', 'umbriel', 'Умбриэль', 266000, 4.144, 585, [120, 118, 114], uraPl],
+     ['uranus', 'titania', 'Титания', 435910, 8.706, 789, [180, 170, 164], uraPl], ['uranus', 'oberon', 'Оберон', 583520, 13.46, 761, [160, 150, 144], uraPl],
+     ['neptune', 'triton', 'Тритон', 354759, -5.877, 1353, [214, 200, 196], tri], ['pluto', 'charon', 'Харон', 19591, 6.387, 606, [170, 164, 160], P.pluto.pl]
+    ].forEach(([pa, id, name, a, Pd, r, col, pl]) => add({ id, name, r, col: col || [200, 190, 170], parent: P[pa], a: a * KM, P: Pd, L0: rnd() * 360, pl, kind: 'moon' }));
+    const earth = P.earth, RE = 6371;
+    [['iss', 'МКС', 420, 51.6, .055], ['hubble', '«Хаббл»', 535, 28.5, .013], ['tiangong', '«Тяньгун»', 390, 41.5, .03]].forEach(([id, name, alt, inc, r]) =>
+      add({ id, name, r, col: [220, 214, 196], parent: earth, a: (RE + alt) * KM, P: .0587 * Math.pow((RE + alt) / RE, 1.5), L0: rnd() * 360, pl: tilted(EQU, inc * Math.PI / 180, rnd() * 6.28), kind: 'sat' }));
+    const leoInc = () => { const u = rnd(); return (u < .38 ? 97.8 : u < .62 ? 53 : u < .7 ? 86.4 : u < .78 ? 51.6 : rnd() * 100) * Math.PI / 180; };
+    const junk = swarm(earth, 1800, i => {
+      const geo = i < 260, meo = !geo && i < 380, alt = geo ? 35786 + gauss() * 120 : meo ? 20200 + gauss() * 400 : 330 + Math.abs(gauss()) * 520 + (rnd() < .12 ? 700 : 0), a = RE + alt;
+      return { a: a * KM, t0: rnd() * 6.2832, P: .0587 * Math.pow(a / RE, 1.5), r: .002 + rnd() * rnd() * .01, pl: tilted(EQU, geo ? rnd() * .2 : meo ? .96 : leoInc(), rnd() * 6.2832) };
+    });
+    const belt = swarm(sun, 2200, () => { const a = 2.15 + rnd() * 1.15 + gauss() * .08; return { a, t0: rnd() * 6.2832, P: 365.256 * Math.pow(a, 1.5), r: 1 + Math.pow(rnd(), 6) * 200, pl: tilted(ECL, Math.abs(gauss()) * .12, rnd() * 6.2832) }; });
+    const kuiper = swarm(sun, 2600, () => { const a = 39.4 + Math.abs(gauss()) * 5 + (rnd() < .3 ? -rnd() * 9 : 0); return { a, t0: rnd() * 6.2832, P: 365.256 * Math.pow(a, 1.5), r: 20 + Math.pow(rnd(), 5) * 500, pl: tilted(ECL, Math.abs(gauss()) * .18, rnd() * 6.2832) }; });
+    return finishSys({ id: 'sun', name: 'Солнечная система', info: SUNINFO, star: sun, bodies, swarms: [belt, kuiper, junk], lum: 1, view: 42, at: () => spun(SUN), raw: null });
+  }
+  function starSys(i) {
+    let seed = (i * 7919 + 1013) % 2147483646 + 1; const rnd = () => (seed = seed * 16807 % 2147483647) / 2147483647, gauss = () => (rnd() + rnd() + rnd() - 1.5) * 1.4;
+    for (let k = 0; k < 4; k++) rnd();
+    const o = i * 6, raw = [CAND[o], CAND[o + 1], CAND[o + 2]], c = [CAND[o + 3], CAND[o + 4], CAND[o + 5]], num = 10000 + i;
+    let kind, Rs, lum;
+    if (c[2] > c[0]) { kind = 'голубая горячая звезда'; Rs = 3 + rnd() * 4; lum = Rs * Rs * 8; }
+    else if (c[2] > .85) { kind = 'белая звезда'; Rs = 1.2 + rnd() * .6; lum = Rs * Rs * 1.6; }
+    else if (c[2] > .6) { kind = 'жёлто-оранжевая звезда, как Солнце'; Rs = .8 + rnd() * .35; lum = Rs * Rs * .9; }
+    else if (rnd() < .1) { kind = 'красный гигант'; Rs = 15 + rnd() * 30; lum = Rs * Rs * .25; }
+    else { kind = 'красный карлик'; Rs = .25 + rnd() * .35; lum = Rs * Rs * .2; }
+    const col = c.map(v => Math.round(v * 255)), name = `Звезда № ${num}`;
+    const bodies = [], add = b => { b.pos = [0, 0, 0]; b.r *= KM; b.alb = b.alb || rockAlb(b.col, bodies.length + i); bodies.push(b); return b; };
+    const star = add({ id: 's' + i, name, r: Rs * 696000, col, kind: 'star' });
+    const base = plane(norm3([gauss(), gauss(), gauss()])), sl = Math.sqrt(lum), snow = 2.7 * sl, mass = Math.max(.15, Math.pow(lum, .28));
+    const n = rnd() < .1 ? 0 : 1 + Math.floor(rnd() * 7);
+    let a = Math.max(Rs * .02, (.04 + rnd() * .25) * sl), giants = 0, outer = 0;
+    const L = 'bcdefghi';
+    const ROCK = [[176, 166, 156], [196, 120, 80], [150, 140, 120], [60, 100, 160], [220, 200, 160], [232, 232, 238]];
+    const GAS = [[[224, 204, 170], [176, 136, 100]], [[204, 214, 232], [150, 168, 204]], [[232, 212, 172], [200, 168, 120]], [[214, 180, 150], [160, 110, 90]]];
+    for (let k = 0; k < n; k++) {
+      const pn = `№ ${num} ${L[k]}`, P = 365.256 * Math.pow(a, 1.5) / Math.sqrt(mass), pl = tilted(base, gauss() * .03, rnd() * 6.28);
+      let p;
+      if (a < snow) {
+        const r = 2500 + rnd() * rnd() * 9000, ccol = a < .12 * sl ? [130, 64, 44] : ROCK[Math.floor(rnd() * ROCK.length)];
+        p = add({ id: `s${i}${k}`, name: pn, r, col: ccol, alb: ccol[2] > 150 && ccol[0] < 100 ? (la, lo) => { const m = telNoise(lo * 2, la * 2.6, k + i); return m > .15 ? [96, 120, 70] : m > .4 ? [230, 232, 236] : [40, 80, 150]; } : null, parent: star, a, P, L0: rnd() * 360, pl, kind: 'planet' });
+      } else if (rnd() < .65) {
+        const [c1, c2] = GAS[Math.floor(rnd() * GAS.length)], r = 30000 + rnd() * 45000; giants++;
+        p = add({ id: `s${i}${k}`, name: pn, r, col: c1, alb: gasAlb(c1, c2, k + i % 7), parent: star, a, P, L0: rnd() * 360, pl, kind: 'planet' });
+        if (rnd() < .35) { p.ring = [[1.3 + rnd() * .3, 2 + rnd() * .4, .35 + rnd() * .3]]; p.ringPl = plane(norm3([gauss(), gauss(), gauss()])); }
+      } else {
+        const r = 15000 + rnd() * 12000, ccol = rnd() < .5 ? [150, 200, 220] : [80, 120, 200];
+        p = add({ id: `s${i}${k}`, name: pn, r, col: ccol, alb: gasAlb(ccol, ccol.map(v => v * .85), k), parent: star, a, P, L0: rnd() * 360, pl, kind: 'planet' });
+      }
+      const rk = p.r / KM, m = rk < 12000 ? Math.pow(rk / 6371, 3) : rk < 30000 ? 17 : 100 + (rk - 30000) / 45000 * 220;
+      const nm = rk > 30000 ? 1 + Math.floor(rnd() * 6) : rk > 12000 ? 1 + Math.floor(rnd() * 3) : rnd() < .3 ? 1 : 0;
+      for (let j = 0, am = rk * (4 + rnd() * 6); j < nm; j++, am *= 1.4 + rnd()) {
+        const mc = ROCK[Math.floor(rnd() * ROCK.length)];
+        add({ id: `s${i}${k}m${j}`, name: `${pn} ${['I', 'II', 'III', 'IV', 'V', 'VI'][j]}`, r: 150 + rnd() * rnd() * 2500, col: mc, parent: p, a: am * KM, P: .0587 * Math.pow(am / 6371, 1.5) / Math.sqrt(m), L0: rnd() * 360, pl: tilted(pl, gauss() * .05, rnd() * 6.28), kind: 'moon' });
+      }
+      outer = a; a *= 1.45 + rnd() * .8;
+    }
+    const swarms = [];
+    if (rnd() < .5) { const a0 = snow * (.6 + rnd() * .3); swarms.push(swarm(star, 1200, () => { const r = a0 * (1 + gauss() * .08); return { a: r, t0: rnd() * 6.2832, P: 365.256 * Math.pow(r, 1.5) / Math.sqrt(mass), r: 1 + Math.pow(rnd(), 6) * 150, pl: tilted(base, Math.abs(gauss()) * .1, rnd() * 6.28) }; })); }
+    if (rnd() < .4) { const a0 = Math.max(outer, snow) * (2 + rnd()); swarms.push(swarm(star, 1500, () => { const r = a0 * (1 + Math.abs(gauss()) * .15); return { a: r, t0: rnd() * 6.2832, P: 365.256 * Math.pow(r, 1.5) / Math.sqrt(mass), r: 10 + Math.pow(rnd(), 5) * 400, pl: tilted(base, Math.abs(gauss()) * .15, rnd() * 6.28) }; })); }
+    const np = bodies.filter(b => b.kind === 'planet').length, word = np === 1 ? 'планета' : np > 1 && np < 5 ? 'планеты' : 'планет';
+    const info = `${kind[0].toUpperCase() + kind.slice(1)}${np ? `, ${np} ${word}` : ', без планет'}. Такой звезды в каталогах нет: её систему придумывает закон — горячие звёзды крупнее и ярче, каменные планеты ближе к звезде, газовые гиганты — за «снеговой линией», где замерзает вода.`;
+    return finishSys({ id: 's' + i, name, info, star, bodies, swarms, lum, view: Math.max(4, outer * 2.4, Rs * .05), at: () => spun(raw), raw });
+  }
+
+  /* ---- where we are: the nearest star point is looked up every few frames (the turning disc is undone on the eye instead of on 150 000 stars) */
+  let nearI = -1, nearD = Infinity, dN = 1, fr = 0;
+  function nearestStar(e) {
+    const c = Math.cos(spin), s = Math.sin(spin), ux = e[0] * c + e[2] * s, uz = -e[0] * s + e[2] * c;
+    let bi = -1, bd = Infinity;
+    for (let i = 0, o = 0, n = CAND.length / 6; i < n; i++, o += 6) {
+      const x = CAND[o], z = CAND[o + 2], dy = e[1] - CAND[o + 1]; if (dy * dy > bd) continue;
+      const turn = x * x + z * z < 4900, dx = (turn ? ux : e[0]) - x, dz = (turn ? uz : e[2]) - z, d = dx * dx + dy * dy + dz * dz;
+      if (d < bd) { bd = d; bi = i; }
+    }
+    nearI = bi; nearD = Math.sqrt(bd);
+  }
+  function enter(sys) {
+    loc = { sys, p: sc3(sub3(cam.e, sys.at()), AUK), days: (Date.now() - DAY0) / 864e5, near: null, ride: false, said: null };
+    sys.update(loc.days);
+    if (cam.to && cam.to.kind === 'go') cam.to = { kind: 'go', at: () => sys.star.pos, stop: sys.view };
+    sayRaw(sys.name, sys.info);
+  }
+  function leave() {
+    if (!loc) return;
+    cam.e = add3(loc.sys.at(), sc3(loc.p, 1 / AUK)); loc = null; hits.length = 0;
+    lq.setTransform(1, 0, 0, 1, 0, 0); lq.clearRect(0, 0, lcv.width, lcv.height);
+  }
+  function stepSystem(dt) {
+    const sys = loc.sys, prev = loc.ride ? loc.near.pos.slice() : null;
+    loc.days += dt * TS / 86400; sys.update(loc.days);
+    if (prev) moveL(sub3(loc.near.pos, prev));                      // ride along with the body we are next to
+    let nb = null, nd = Infinity;
+    for (const b of sys.bodies) { const d = len3(sub3(b.pos, loc.p)) - b.r; if (d < nd) { nd = d; nb = b; } }
+    if (nd < nb.r * .02) { loc.p = add3(nb.pos, sc3(norm3(sub3(loc.p, nb.pos)), nb.r * 1.02)); nd = nb.r * .02; }   // never through the surface
+    loc.near = nb; loc.ride = nb.kind !== 'star' && nd < nb.r * 60; dN = Math.max(nd, 1e-12);
+    if (loc.ride && loc.said !== nb && nd < nb.r * 25 && nb.info) { loc.said = nb; sayRaw(nb.name, nb.info); }
+    if (len3(loc.p) > SYS_R * AUK * 1.15) leave();
+  }
+  function goBody(b, stop) {
+    cam.to = { kind: 'go', at: () => b.pos, stop: stop || (b.kind === 'star' ? b.r * 8 : b.r * (b.ring ? 7 : 4)) };
+    cam.idle = 0; loc.said = b; sayRaw(b.name, b.info || (b.kind === 'moon' ? `Спутник планеты ${b.parent.name}.` : b.kind === 'planet' ? 'Планета, придуманная по законам: её размер и цвет зависят от расстояния до звезды.' : loc.sys.info));
+  }
+
+  /* ---- drawing a system: real sizes, so far things are points; near ones are lit globes (the telescope's globe painter) */
+  const lcv = $('#galLoc'), lq = lcv.getContext('2d'), hits = [], globes = new Map(), GS = [12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384];
+  let built1 = false, FONT = '';
+  function globe(b, R, L) {
+    const sz = GS.find(v => v >= R * 2) || 384, key = b.id + '|' + sz + '|' + L.map(v => Math.round(v * 6)).join();
+    let g = globes.get(key);
+    if (!g && !built1) { built1 = true; if (globes.size > 40) globes.delete(globes.keys().next().value); g = shade((b.albc ||= {})[sz] ||= albMap(b.alb, sz), sz, L); globes.set(key, g); }
+    return g ? (b.lastG = g) : b.lastG;                               // one new globe a frame at most; till then the last one
+  }
+  function albMap(alb, size) {            // the colour of each pixel of the disc, and how far it faces us
+    const A = new Float32Array(size * size * 4), r = size / 2 - 1;
+    for (let j = 0, o = 0; j < size; j++) for (let i = 0; i < size; i++, o += 4) {
+      const px = (i + .5 - size / 2) / r, py = (j + .5 - size / 2) / r, rr = px * px + py * py;
+      if (rr > 1.02) { A[o + 3] = -1; continue; }
+      const pz = Math.sqrt(Math.max(0, 1 - rr)), c = alb(Math.asin(Math.max(-1, Math.min(1, -py))), Math.atan2(px, pz), px, py, pz);
+      A[o] = c[0]; A[o + 1] = c[1]; A[o + 2] = c[2]; A[o + 3] = Math.min(1, Math.max(0, (1 - Math.sqrt(rr)) * r + .5));
+    }
+    return A;
+  }
+  function shade(A, size, L) {              // sunlight on it: a soft terminator, a little darker toward the edge; the night side stays a dark disc
+    const c = document.createElement('canvas'); c.width = c.height = size;
+    const q = c.getContext('2d'), img = q.createImageData(size, size), d = img.data, r = size / 2 - 1;
+    for (let j = 0, o = 0; j < size; j++) for (let i = 0; i < size; i++, o += 4) {
+      const e = A[o + 3]; if (e < 0) continue;
+      const px = (i + .5 - size / 2) / r, py = (j + .5 - size / 2) / r, pz = Math.sqrt(Math.max(0, 1 - px * px - py * py));
+      const k = .015 + Math.min(1, Math.max(0, (px * L[0] + py * L[1] + pz * L[2] + .04) / .14)) * (.62 + .38 * Math.sqrt(pz));
+      d[o] = A[o] * k; d[o + 1] = A[o + 1] * k; d[o + 2] = A[o + 2] * k; d[o + 3] = 255 * e;
+    }
+    q.putImageData(img, 0, 0); return c;
+  }
+  function drawLocal([s, u, f]) {
+    const q = lq, E = loc.p, F = H / (2 * Math.tan(25 * Math.PI / 180)), sys = loc.sys, sun = sys.star;
+    q.setTransform(dpr, 0, 0, dpr, 0, 0); q.clearRect(0, 0, W, H); hits.length = 0; built1 = false;
+    q.font = FONT || (FONT = '500 11px ' + getComputedStyle(document.body).getPropertyValue('--mono'));
+    const pr = p => {
+      const x = p[0] - E[0], y = p[1] - E[1], z = p[2] - E[2], zc = x * f[0] + y * f[1] + z * f[2];
+      return zc > 0 ? [W / 2 + (x * s[0] + y * s[1] + z * s[2]) / zc * F, H / 2 - (x * u[0] + y * u[1] + z * u[2]) / zc * F, zc] : null;
+    };
+    const on = (P, m) => P && P[0] > -m && P[0] < W + m && P[1] > -m && P[1] < H + m;
+    // orbits: faint lines, only when they are big enough to mean something
+    q.lineWidth = 1;
+    for (const b of sys.bodies) {
+      if (!b.parent || b.kind === 'sat') continue;
+      const pp = pr(b.parent.pos); if (!pp || b.a / pp[2] * F < (b.kind === 'moon' ? 22 : 10)) continue;
+      const [X, Y] = b.pl, c0 = b.parent.pos; let pen = false;
+      q.strokeStyle = b.kind === 'moon' ? 'rgba(170,186,230,.1)' : 'rgba(170,186,230,.16)'; q.beginPath();
+      for (let k = 0; k <= 128; k++) {
+        const t = k / 128 * 6.2832, cc = Math.cos(t) * b.a, ss = Math.sin(t) * b.a;
+        const P = pr([c0[0] + X[0] * cc + Y[0] * ss, c0[1] + X[1] * cc + Y[1] * ss, c0[2] + X[2] * cc + Y[2] * ss]);
+        if (!P || Math.abs(P[0]) > 1e5 || Math.abs(P[1]) > 1e5) { pen = false; continue; }
+        pen ? q.lineTo(P[0], P[1]) : q.moveTo(P[0], P[1]); pen = true;
+      }
+      q.stroke();
+    }
+    // belts and junk: dots; a rock that comes close enough gets a lumpy shape
+    for (const w of sys.swarms) {
+      const [cr, cg, cb] = w.col; q.fillStyle = `rgba(${cr},${cg},${cb},.6)`;
+      for (let i = 0, o = 0; i < w.n; i++, o += 3) {
+        const P = pr([w.pos[o], w.pos[o + 1], w.pos[o + 2]]); if (!on(P, 4)) continue;
+        const R = w.R[i] * KM / P[2] * F;
+        if (R < 1.1) { q.fillRect(P[0], P[1], R > .5 ? 1.5 : 1, R > .5 ? 1.5 : 1); continue; }
+        q.save(); q.fillStyle = `rgb(${cr * .8 | 0},${cg * .78 | 0},${cb * .74 | 0})`; q.beginPath();
+        for (let k = 0; k < 9; k++) { const t = k / 9 * 6.2832, rr = R * (.72 + .28 * Math.sin(i * 1.7 + k * 2.3) * Math.cos(i + k)); k ? q.lineTo(P[0] + Math.cos(t) * rr, P[1] + Math.sin(t) * rr * .8) : q.moveTo(P[0] + rr, P[1]); }
+        q.fill(); q.restore();
+      }
+    }
+    // the bodies, far ones first
+    const list = [];
+    for (const b of sys.bodies) { const P = pr(b.pos); if (P) list.push([P[2], b, P]); }
+    list.sort((a, b) => b[0] - a[0]);
+    for (const [, b, P] of list) {
+      const R = b.r / P[2] * F;
+      if (!on(P, R + 200)) continue;
+      if (b.kind === 'star') {
+        const d = len3(sub3(b.pos, E)), g = Math.max(R * 3.2, 4 + 120 * Math.sqrt(sys.lum) / (1 + d)), [r, gg, bb] = b.col;
+        q.globalCompositeOperation = 'lighter';
+        const gr = q.createRadialGradient(P[0], P[1], 0, P[0], P[1], g);
+        gr.addColorStop(0, 'rgba(255,255,255,.95)'); gr.addColorStop(Math.min(.5, R / g + .04), `rgba(${r},${gg},${bb},.75)`); gr.addColorStop(Math.min(.8, R / g * 1.6 + .2), `rgba(${r},${gg},${bb},.12)`); gr.addColorStop(1, `rgba(${r},${gg},${bb},0)`);
+        q.fillStyle = gr; q.fillRect(P[0] - g, P[1] - g, g * 2, g * 2);
+        q.globalCompositeOperation = 'source-over';
+        if (R > 2) { const dg = q.createRadialGradient(P[0], P[1], 0, P[0], P[1], R); dg.addColorStop(0, `rgb(255,${Math.min(255, gg + 30)},${Math.min(255, bb + 40)})`); dg.addColorStop(1, `rgb(${r * .85 | 0},${gg * .6 | 0},${bb * .4 | 0})`); q.fillStyle = dg; q.beginPath(); q.arc(P[0], P[1], R, 0, 7); q.fill(); }
+      } else {
+        const ld = norm3(sub3(sun.pos, b.pos)), L = [dot3(ld, s), -dot3(ld, u), -dot3(ld, f)], lit = .5 + .5 * L[2];
+        if (b.ring && R > 1.5) ring(q, b, pr, P, true);
+        if (b.kind === 'sat' && R > 1.2) {                       // a station: a body and two wings of solar panels
+          q.fillStyle = '#c9c2b0'; q.fillRect(P[0] - R * .5, P[1] - R * .12, R, R * .24);
+          q.fillStyle = '#4a5a8a'; q.fillRect(P[0] - R, P[1] - R * .45, R * .34, R * .9); q.fillRect(P[0] + R * .66, P[1] - R * .45, R * .34, R * .9);
+        } else if (R < 1.2) {
+          q.fillStyle = `rgba(${b.col[0]},${b.col[1]},${b.col[2]},${.45 + .55 * lit})`; q.fillRect(P[0] - .9, P[1] - .9, 1.8, 1.8);
+        } else if (R < 5) {
+          q.fillStyle = `rgb(${b.col.map(v => v * (.25 + .75 * lit) | 0).join(',')})`; q.beginPath(); q.arc(P[0], P[1], R, 0, 7); q.fill();
+        } else {
+          const g = globe(b, R, L);
+          if (g) q.drawImage(g, P[0] - R, P[1] - R, R * 2, R * 2); else { q.fillStyle = `rgb(${b.col.join(',')})`; q.beginPath(); q.arc(P[0], P[1], R, 0, 7); q.fill(); }
+          if (b.id === 'earth' || b.id === 'venus' || b.id === 'titan') {   // a thin blue (or golden) rim of air
+            q.strokeStyle = b.id === 'earth' ? 'rgba(120,170,255,.35)' : 'rgba(255,214,150,.3)'; q.lineWidth = Math.max(1, R * .025); q.beginPath(); q.arc(P[0], P[1], R * 1.01, 0, 7); q.stroke();
+          }
+        }
+        if (b.ring && R > 1.5) ring(q, b, pr, P, false);
+      }
+      // the name: planets always, moons when their planet is close, stations when the Earth fills the view
+      const pp = b.parent && pr(b.parent.pos), show = b.kind === 'star' || b.kind === 'planet' || b.kind === 'dwarf' ? true
+        : pp && b.a / pp[2] * F > (b.kind === 'sat' ? 70 : 30);
+      if (show && on(P, 0)) {
+        const tx = P[0] + Math.max(R, 2) + 7, ty = P[1] + 4, tw = q.measureText(b.name).width;
+        q.fillStyle = b.kind === 'star' ? 'rgba(244,190,120,.8)' : 'rgba(214,222,250,.6)';
+        q.fillText(b.name, tx, ty); hits.push({ x: tx + tw / 2, y: P[1], w: tw / 2 + Math.max(R, 6) + 8, b });
+      }
+    }
+  }
+  function ring(q, b, pr, P, back) {      // the far half of the ring before the globe, the near half after
+    const [X, Y] = b.ringPl, c = b.pos;
+    for (const [i0, i1, al] of b.ring) {
+      q.fillStyle = `rgba(214,196,160,${al})`; q.beginPath();
+      for (let k = 0; k < 72; k++) {
+        const t0 = k / 72 * 6.2832, t1 = (k + 1) / 72 * 6.2832, pt = (t, rr) => pr(add3(c, add3(sc3(X, Math.cos(t) * rr * b.r), sc3(Y, Math.sin(t) * rr * b.r))));
+        const a = pt(t0, i0), bq = pt(t1, i0), cq = pt(t1, i1), d = pt(t0, i1); if (!a || !bq || !cq || !d) continue;
+        if ((a[2] + cq[2] > P[2] * 2) !== back) continue;
+        q.moveTo(a[0], a[1]); q.lineTo(bq[0], bq[1]); q.lineTo(cq[0], cq[1]); q.lineTo(d[0], d[1]); q.closePath();
+      }
+      q.fill();
+    }
   }
 
   /* ---- places to fly to; their tags follow the galaxy as it turns */
@@ -3326,69 +3601,141 @@ void main(){
   const tagEls = [...tags.children];
   tags.addEventListener('click', e => { const b = e.target.closest('button'); if (b) fly(+b.dataset.i); });
   function fly(i) {
-    const [k, n, at, v] = PLACES[i], p = at();
-    cam.to = { tx: p[0], ty: p[1], tz: p[2], dist: v.dist, pitch: v.pitch, yaw: cam.yaw };
+    const [k, n, at, v] = PLACES[i]; leave();
+    cam.to = { kind: 'place', P: at, dist: v.dist, pitch: v.pitch };
     cam.idle = 0; say(k, k === 'arm' ? n : null);
   }
   function home(top) {
-    cam.to = top === 'top' ? { tx: 0, ty: 0, tz: 0, dist: 150, pitch: 1.5, yaw: cam.yaw } : top === 'side' ? { tx: 0, ty: 0, tz: 0, dist: 140, pitch: .03, yaw: cam.yaw }
-      : top === 'far' ? { tx: 40, ty: -60, tz: -70, dist: 520, pitch: .35, yaw: cam.yaw } : { tx: 0, ty: 0, tz: 0, dist: 165, pitch: .62, yaw: cam.yaw };
+    leave();
+    const [P, dist, pitch] = top === 'top' ? [[0, 0, 0], 150, 1.5] : top === 'side' ? [[0, 0, 0], 140, .03] : top === 'far' ? [[40, -60, -70], 520, .35] : [[0, 0, 0], 165, .62];
+    cam.to = { kind: 'place', P: () => P, dist, pitch };
     say(top === 'far' ? 'lmc' : 'mw');
   }
-  function say(k, title) {
-    sel = k; const [t, txt] = INFO[k];
-    card.innerHTML = `<h3>${title || t}</h3><p>${txt}</p>`;
+  function toSolar() {                       // all the way in: across the galaxy, into the Sun's system, to a view of the planets
+    if (loc && loc.sys.id === 'sun') return goBody(loc.sys.star, loc.sys.view);
+    leave(); cam.to = { kind: 'go', at: () => spun(SUN), stop: SYS_R * .4 }; cam.idle = 0;
+    sayRaw('Летим к Солнцу', 'Сквозь рукав Ориона — в Солнечную систему. Дальше можно самому: колесо или W — вперёд, тяни — оглядеться.');
+  }
+  function say(k, title) { sayRaw(title || INFO[k][0], INFO[k][1]); sel = k; }
+  function sayRaw(t, txt) {
+    card.innerHTML = `<h3>${t}</h3><p>${txt}</p>`;
     card.classList.remove('in'); void card.offsetWidth; card.classList.add('in');
   }
 
   /* ---- the loop */
+  const keys = {}; let held = 0;
   function frame(now) {
     if (box.hidden) { raf = 0; return; }
     raf = requestAnimationFrame(frame);
     if (last && now - last < 15) return;                                   // 60 fps is plenty: on a 120 Hz screen half the work
-    const dt = Math.min(.05, (now - (last || now)) / 1000); last = now;
+    const dt = Math.min(.05, (now - (last || now)) / 1000); last = now; fr++;
+    const ds = -dt * .012 * spinRate; spin += ds;                          // trailing arms: the galaxy turns against their winding
+    if (loc) stepSystem(dt);
+    else {
+      const e = cam.e, w = Math.max(0, Math.min(1, 1 - (Math.max(0, Math.hypot(e[0], e[2]) - 60) + Math.max(0, Math.abs(e[1]) - 15)) / 30));
+      if (w > 0 && !(cam.to && cam.to.kind === 'place')) { cam.e = rotY(e, ds * w); cam.yaw -= ds * w; }   // inside the disc we turn with it, so nearby stars stay put
+      if (fr % 4 === 0 || nearI < 0) nearestStar(cam.e);
+      const sunD = len3(sub3(spun(SUN), cam.e));
+      dN = Math.max(1e-9, Math.min(sunD, nearD));
+      if (sunD < SYS_R) enter(sunSys()); else if (nearD < SYS_R && nearI >= 0) enter(starSys(nearI));
+    }
+    // keys: fly, slowly at first and faster the longer they are held; the speed scales with how far the nearest thing is
+    const mv = [(keys.r ? 1 : 0) - (keys.l ? 1 : 0), (keys.u ? 1 : 0) - (keys.d ? 1 : 0), (keys.f ? 1 : 0) - (keys.b ? 1 : 0)];
+    let B = basis();
+    if (mv[0] || mv[1] || mv[2]) {
+      held += dt; cam.to = null; cam.idle = 0;
+      let m = dN * .9 * Math.min(40, Math.pow(1.8, held)) * (keys.shift ? 5 : 1) * dt; if (loc) m = Math.min(m, dN * .5);
+      moveL(sc3(norm3(add3(add3(sc3(B[0], mv[0]), sc3(B[1], mv[1])), sc3(B[2], mv[2]))), m));
+    } else held = 0;
     if (cam.to) {
-      const k = 1 - Math.pow(.004, dt);
-      if (sel === 'sun') { const p = spun(SUN); cam.to.tx = p[0]; cam.to.ty = p[1]; cam.to.tz = p[2]; }
-      for (const f of ['tx', 'ty', 'tz', 'pitch']) cam[f] += (cam.to[f] - cam[f]) * k;
-      cam.dist *= Math.pow(cam.to.dist / cam.dist, k);
-      if (Math.abs(cam.dist / cam.to.dist - 1) < .002 && Math.abs(cam.to.pitch - cam.pitch) < .002) cam.to = null;
+      const T = cam.to, k = 1 - Math.pow(.004, dt);
+      if (T.kind === 'place') {
+        const te = add3(T.P(), sc3(dirv(cam.yaw, T.pitch), T.dist));
+        cam.e = add3(cam.e, sc3(sub3(te, cam.e), k)); cam.pitch += (T.pitch - cam.pitch) * k;
+        if (len3(sub3(te, cam.e)) < T.dist * .002 && Math.abs(T.pitch - cam.pitch) < .002) cam.to = null;
+      } else {                                                             // 'go': turn to it, then fly at it, slowing as it grows
+        const d = sub3(T.at(), eyeL()), D = len3(d) || 1e-12;
+        lookAt(d, 1 - Math.pow(.02, dt));
+        const face = dot3(basis()[2], sc3(d, 1 / D));
+        if (face > .8) moveL(sc3(d, (1 - T.stop / D) * (1 - Math.pow(.15, dt)) * Math.min(1, (face - .8) * 5)));
+        if (Math.abs(D - T.stop) < T.stop * .03 && face > .999) cam.to = null;
+      }
+      B = basis();
     }
     cam.idle += dt;
-    if (!drag && !reduce && cam.idle > 4) cam.yaw += dt * .025;            // a slow drift around when left alone
-    spin -= dt * .012 * spinRate;                                          // trailing arms: the galaxy turns against their winding
-    if (sel === 'sun' && !cam.to) { const p = spun(SUN); cam.tx = p[0]; cam.ty = p[1]; cam.tz = p[2]; }   // ride along with the Sun
-    const M = matrix(), px = H * dpr / (2 * Math.tan(25 * Math.PI / 180));
+    if (!loc && !drag && !reduce && !cam.to && cam.idle > 4 && len3(cam.e) > 80) { cam.e = rotY(cam.e, -dt * .025); cam.yaw += dt * .025; }   // a slow drift around when left alone
+    EG = loc ? add3(loc.sys.at(), sc3(loc.p, 1 / AUK)) : cam.e;
+    const M = matrix(B), px = H * dpr / (2 * Math.tan(25 * Math.PI / 180)), hid = loc && loc.sys.raw || [1e9, 1e9, 1e9];
     gl.viewport(0, 0, cv.width, cv.height);
     gl.clearColor(.004, .006, .014, 1); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND); gl.uniformMatrix4fv(U.mvp, false, M);
     gl.uniform1f(U.spin, spin); gl.uniform1f(U.px, px); gl.uniform1f(U.dpr, dpr); gl.uniform1f(U.far, 30000);
+    gl.uniform3f(U.eye, EG[0], EG[1], EG[2]); gl.uniform3f(U.hide, hid[0], hid[1], hid[2]);
     gl.blendFunc(gl.ONE, gl.ONE); gl.uniform1f(U.dust, 0); attrs(bStars); gl.drawArrays(gl.POINTS, 0, nStars);
     gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_ALPHA); gl.uniform1f(U.dust, 1); attrs(bDust); gl.drawArrays(gl.POINTS, 0, nDust);
+    if (loc) drawLocal(B);
     // the tags: only where the place is in front and not too far
     PLACES.forEach(([k, , at], i) => {
-      const s = screen(M, at()), el = tagEls[i], far = s && s[2] > (k === 'lmc' ? 900 : 420);
+      const s = !loc && screen(M, at()), el = tagEls[i], far = s && s[2] > (k === 'lmc' ? 900 : 420);
       if (!s || far || s[0] < -50 || s[0] > W + 50 || s[1] < -20 || s[1] > H + 20) { el.style.opacity = 0; el.style.pointerEvents = 'none'; return; }
       el.style.opacity = k === 'sun' ? 1 : .75; el.style.pointerEvents = 'auto';
       el.style.transform = `translate(${s[0].toFixed(1)}px,${s[1].toFixed(1)}px)`;
     });
   }
-  function size() { W = innerWidth; H = innerHeight; dpr = Math.min(1.5, devicePixelRatio || 1); cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  function size() {
+    W = innerWidth; H = innerHeight; dpr = Math.min(1.5, devicePixelRatio || 1);
+    cv.width = lcv.width = Math.round(W * dpr); cv.height = lcv.height = Math.round(H * dpr);
+  }
 
-  /* ---- hands: drag to turn, wheel to come closer, double click — back to the whole galaxy */
-  cv.addEventListener('pointerdown', e => { drag = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); cam.to = null; cam.idle = 0; });
-  cv.addEventListener('pointermove', e => {
-    if (!drag) return;
-    cam.yaw -= (e.clientX - drag[0]) * .005; cam.pitch = Math.max(-1.5, Math.min(1.53, cam.pitch + (e.clientY - drag[1]) * .004)); drag = [e.clientX, e.clientY];
+  /* ---- hands: drag to look around, right button (or Shift) to circle what is near, wheel / W S A D R F to fly, a name to fly to it */
+  const ptrs = new Map(); let pinch0 = 0, moved = 0;
+  const pdist = () => { const [a, b] = [...ptrs.values()]; return Math.hypot(a[0] - b[0], a[1] - b[1]); };
+  function flyStep(n) {
+    cam.to = null; cam.idle = 0; n = Math.max(-3, Math.min(3, n));
+    moveL(sc3(basis()[2], dN * (n > 0 ? 1 - Math.pow(.68, n) : (1 - Math.pow(1 / .68, -n)) * .8)));
+  }
+  function orbit(dx, dy) {
+    const E = eyeL(), piv = loc ? loc.near.pos : len3(cam.e) > 70 ? [0, 0, 0] : add3(cam.e, sc3(basis()[2], 8));
+    const rel = sub3(E, piv), d = len3(rel);
+    let y = Math.atan2(rel[0], rel[2]), p = Math.asin(Math.max(-1, Math.min(1, rel[1] / d)));
+    y -= dx * .005; p = clampP(p + dy * .004);
+    const ne = add3(piv, sc3(dirv(y, p), d)); E[0] = ne[0]; E[1] = ne[1]; E[2] = ne[2]; cam.yaw = y; cam.pitch = p;
+  }
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  cv.addEventListener('pointerdown', e => {
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]); cv.setPointerCapture(e.pointerId);
+    drag = { x: e.clientX, y: e.clientY, orbit: e.button === 2 || e.shiftKey }; moved = 0; cam.idle = 0;
+    if (ptrs.size === 2) pinch0 = pdist();
   });
-  const up = () => { drag = null; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-  cv.addEventListener('wheel', e => { e.preventDefault(); cam.to = null; cam.idle = 0; cam.dist = Math.max(3, Math.min(1400, cam.dist * Math.pow(1.0015, e.deltaY))); }, { passive: false });
+  cv.addEventListener('pointermove', e => {
+    if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptrs.size === 2) { const d = pdist(); flyStep((d - pinch0) / 50); pinch0 = d; moved = 99; return; }
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY; moved += Math.abs(dx) + Math.abs(dy);
+    if (moved < 4) return;
+    cam.to = null; cam.idle = 0;
+    if (drag.orbit) orbit(dx, dy); else { cam.yaw += dx * .0032; cam.pitch = clampP(cam.pitch - dy * .0032); }
+  });
+  const up = e => {
+    ptrs.delete(e.pointerId);
+    if (drag && moved < 4 && loc && e.type === 'pointerup') { const h = hits.find(h => Math.abs(e.clientX - h.x) < h.w && Math.abs(e.clientY - h.y) < 13); if (h) goBody(h.b); }
+    if (!ptrs.size) drag = null;
+  };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); flyStep(-e.deltaY * (e.deltaMode ? 33 : 1) / 100); }, { passive: false });
   cv.addEventListener('dblclick', () => home());
+  const KEYS = { w: 'f', ц: 'f', arrowup: 'f', s: 'b', ы: 'b', arrowdown: 'b', a: 'l', ф: 'l', arrowleft: 'l', d: 'r', в: 'r', arrowright: 'r', r: 'u', к: 'u', f: 'd', а: 'd' };
+  addEventListener('keydown', e => {
+    if (box.hidden || e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = KEYS[e.key.toLowerCase()]; keys.shift = e.shiftKey; if (k) { keys[k] = true; e.preventDefault(); }
+  });
+  addEventListener('keyup', e => { const k = KEYS[e.key.toLowerCase()]; keys.shift = e.shiftKey; if (k) keys[k] = false; });
+  addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
   $('#galBack').addEventListener('click', () => close());
   $('#galBar').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const a = b.dataset.a;
-    if (a === 'sun') fly(0); else if (a === 'core') fly(1); else if (a === 'spin') { spinRate = spinRate === 1 ? 40 : 1; b.setAttribute('aria-pressed', spinRate > 1); }
+    if (a === 'sun') fly(0); else if (a === 'core') fly(1); else if (a === 'sys') toSolar(); else if (a === 'spin') { spinRate = spinRate === 1 ? 40 : 1; b.setAttribute('aria-pressed', spinRate > 1); }
     else home(a);
   });
   addEventListener('resize', () => { if (!box.hidden) size(); });
@@ -3399,12 +3746,13 @@ void main(){
     box.classList.remove('out'); box.hidden = false; document.documentElement.classList.add('gal-open');
     size();
     if (!built) { built = true; if (!init()) { box.hidden = true; document.documentElement.classList.remove('gal-open'); return toast('Галактике нужна видеокарта с WebGL'); } }
-    cam.dist = 900; cam.pitch = .9; cam.tx = cam.ty = cam.tz = 0; home();      // a slow flight in from far away
+    leave(); cam.yaw = 2.2; cam.pitch = .9; cam.e = sc3(dirv(cam.yaw, cam.pitch), 900); home();      // a slow flight in from far away
     last = 0; if (!raf) raf = requestAnimationFrame(frame);
     $('#galBack').focus({ preventScroll: true });
   }
   function close() {
     if (box.hidden || box.classList.contains('out')) return;
+    for (const k in keys) keys[k] = false;
     box.classList.add('out'); document.documentElement.classList.remove('gal-open');
     setTimeout(() => { box.hidden = true; sky.wake(); $('#galBtn').focus(); }, 460);
   }
